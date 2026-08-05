@@ -1,7 +1,7 @@
 // GestorMobile — Dashboard
 import {
   View, Text, ScrollView, StyleSheet,
-  ActivityIndicator, useColorScheme, TouchableOpacity, Alert
+  ActivityIndicator, useColorScheme, TouchableOpacity, Alert, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -79,13 +79,23 @@ export default function DashboardScreen() {
           .join(',') + '\n';
       });
 
-      const fileUri = FileSystem.documentDirectory + 'vendas_export.csv';
-      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
-      
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri);
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'vendas_export.csv';
+        link.click();
+        URL.revokeObjectURL(url);
       } else {
-        Alert.alert('Erro', 'A partilha de ficheiros não está disponível neste dispositivo.');
+        const fileUri = FileSystem.documentDirectory + 'vendas_export.csv';
+        await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri);
+        } else {
+          Alert.alert('Erro', 'A partilha de ficheiros não está disponível neste dispositivo.');
+        }
       }
     } catch (e: any) {
       Alert.alert('Erro', 'Não foi possível exportar as vendas.');

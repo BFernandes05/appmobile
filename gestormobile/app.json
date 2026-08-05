@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "GestorMobile",
+    "slug": "gestormobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "scheme": "gestormobile",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.gestormobile.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.gestormobile.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0f172a"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "A app precisa de acesso às tuas fotos para adicionar imagens aos produtos."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4a8b831d-c058-4e7e-8d27-0ba60cb0f243"
+      }
+    },
+    "owner": "rbluxuries-team"
+  }
+}

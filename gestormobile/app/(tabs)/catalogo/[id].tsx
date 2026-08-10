@@ -2,17 +2,28 @@
 import { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator, Image, useColorScheme,
+  TextInput, Alert, ActivityIndicator, Image, Platform, useColorScheme,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { File } from 'expo-file-system';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Colors } from '@/constants/colors';
 import type { Product, ProductVariant } from '@/types';
+
+async function imageUriToArrayBuffer(uri: string): Promise<ArrayBuffer> {
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    if (!response.ok) throw new Error('Não foi possível preparar a imagem selecionada.');
+    return response.arrayBuffer();
+  }
+
+  return new File(uri).arrayBuffer();
+}
 
 async function fetchProduct(id: string): Promise<Product> {
   const { data, error } = await supabase
@@ -55,35 +66,39 @@ export default function ProductDetailScreen() {
     setUploadingImage(true);
     try {
       const asset = result.assets[0];
-      // Redimensionar e comprimir para <300KB
+      // Normalizar o formato e reduzir o tamanho antes do envio.
       const manipulated = await ImageManipulator.manipulateAsync(
         asset.uri,
-        [{ resize: { width: 1000, height: 1000 } }],
-        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+        [{ resize: { width: 1200 } }],
+        { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG }
       );
 
-      const ext = 'jpg';
-      const fileName = `${id}_${Date.now()}.${ext}`;
-      const formData = new FormData();
-      formData.append('file', {
-        uri: manipulated.uri,
-        name: fileName,
-        type: 'image/jpeg',
-      } as any);
+      const filePath = `${id}/${Date.now()}.jpg`;
+      const imageData = await imageUriToArrayBuffer(manipulated.uri);
 
       const { error: uploadError } = await supabase.storage
         .from('product-images')
-        .upload(fileName, formData, { contentType: 'image/jpeg', upsert: true });
+        .upload(filePath, imageData, {
+          contentType: 'image/jpeg',
+          cacheControl: '3600',
+          upsert: false,
+        });
 
       if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage
         .from('product-images')
-        .getPublicUrl(fileName);
+        .getPublicUrl(filePath);
 
-      await supabase.from('products').update({ image_url: urlData.publicUrl }).eq('id', id);
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ image_url: urlData.publicUrl })
+        .eq('id', id);
+      if (updateError) throw updateError;
+
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['product', id] });
+      Alert.alert('Imagem atualizada', 'A fotografia do artigo foi guardada com sucesso.');
     } catch (e: any) {
       Alert.alert('Erro no upload', e.message ?? 'Erro desconhecido. Tenta novamente.');
     } finally {

@@ -8,6 +8,23 @@ export interface Profile {
   email: string;
   full_name: string | null;
   role: UserRole;
+  referral_code: string;
+  referral_count: number;
+  created_at: string;
+}
+
+export type VoucherDiscountType = 'FIXED_PRICE_15';
+
+export interface Voucher {
+  id: string;
+  user_id: string;
+  code: string;
+  is_used: boolean;
+  expires_at: string;
+  discount_type: VoucherDiscountType;
+  used_at: string | null;
+  revoked_at: string | null;
+  notified_at: string | null;
   created_at: string;
 }
 
@@ -63,6 +80,10 @@ export interface Sale {
   sync_status: SyncStatus;
   local_id: string | null;
   created_by: string | null;
+  checkout_id: string | null;
+  original_total_price: number | null;
+  voucher_id: string | null;
+  cancelled_at: string | null;
   variant?: ProductVariant & { product?: Product };
 }
 

@@ -10,6 +10,7 @@ import * as Sharing from 'expo-sharing';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Colors } from '@/constants/colors';
+import { ReferralRewards } from '@/components/ReferralRewards';
 
 interface ExportedSale {
   sale_date: string;
@@ -102,17 +103,7 @@ export default function DashboardScreen() {
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text style={{ fontSize: 60, marginBottom: 20 }}>🔒</Text>
-        <Text style={styles.headerTitle}>Acesso Restrito</Text>
-        <Text style={{ color: c.textSecondary, marginTop: 10 }}>O Dashboard financeiro é apenas para administradores.</Text>
-      </SafeAreaView>
-    );
-  }
-
-  if (isLoading || !data) {
+  if (isAdmin && (isLoading || !data)) {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color={c.primary} />
@@ -120,11 +111,11 @@ export default function DashboardScreen() {
     );
   }
 
-  const todayRevenue = data.todaySales.reduce((acc, s) => acc + s.total_price, 0);
-  const todayItems = data.todaySales.reduce((acc, s) => acc + s.quantity, 0);
+  const todayRevenue = data?.todaySales.reduce((acc, s) => acc + s.total_price, 0) ?? 0;
+  const todayItems = data?.todaySales.reduce((acc, s) => acc + s.quantity, 0) ?? 0;
 
   // Preparar dados para o gráfico
-  const chartData = [...data.monthly].reverse().map(m => {
+  const chartData = [...(data?.monthly ?? [])].reverse().map(m => {
     const d = new Date(m.month);
     return {
       value: m.total_revenue,
@@ -140,12 +131,15 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Dashboard</Text>
-        <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}>
+        {isAdmin && <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}>
           <Text style={styles.exportBtnText}>📥 Exportar CSV</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>}
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ReferralRewards colors={c} />
+
+        {isAdmin && data && <>
         
         {/* KPIs */}
         <View style={styles.kpiGrid}>
@@ -189,6 +183,7 @@ export default function DashboardScreen() {
           )}
         </View>
 
+        </>}
       </ScrollView>
     </SafeAreaView>
   );

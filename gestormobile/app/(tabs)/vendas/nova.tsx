@@ -14,7 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCartStore } from '@/stores/cartStore';
 import { saveOfflineSale, updateSaleStatus } from '@/lib/db';
 import { Colors } from '@/constants/colors';
-import type { Product, ProductVariant, PaymentMethod } from '@/types';
+import type { Product, ProductVariant, PaymentMethod, Voucher } from '@/types';
 
 const PAYMENT_METHODS: PaymentMethod[] = ['Dinheiro', 'MB Way', 'Transferência'];
 
@@ -38,16 +38,37 @@ export default function NovaVendaScreen() {
   const [productSearch, setProductSearch] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
+  const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
 
   const { data: products = [] } = useQuery({
     queryKey: ['products-active-sales'],
     queryFn: fetchActiveProducts,
   });
 
+  const { data: vouchers = [] } = useQuery({
+    queryKey: ['available-vouchers', user?.id],
+    queryFn: async (): Promise<Voucher[]> => {
+      const { data, error } = await supabase
+        .from('vouchers')
+        .select('*')
+        .eq('is_used', false)
+        .is('revoked_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .order('expires_at');
+      if (error) throw error;
+      return data as Voucher[];
+    },
+    enabled: !!user?.id,
+  });
+
   const styles = createStyles(c);
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(productSearch.toLowerCase())
   );
+  const selectedVoucher = vouchers.find(v => v.id === selectedVoucherId) ?? null;
+  const voucherCanApply = cart.items.length === 1 && cart.itemCount() === 1;
+  const checkoutTotal = selectedVoucher && voucherCanApply ? 15 : cart.total();
 
   const addVariantToCart = (variant: ProductVariant, product: Product) => {
     if (variant.stock_quantity <= 0) {
@@ -73,55 +94,92 @@ export default function NovaVendaScreen() {
       const netInfo = await NetInfo.fetch();
       const isOnline = netInfo.isConnected;
       const saleDate = new Date().toISOString();
+      const normalizedReferral = referralCode.trim().toUpperCase();
 
-      // Guardar cada item do carrinho como uma venda
-      for (const item of cart.items) {
-        const localId = Crypto.randomUUID();
-        
-        // 1. Guardar offline (sempre primeiro)
-        await saveOfflineSale({
-          local_id: localId,
-          customer_name: cart.customerName || null,
-          product_variant_id: item.variant.id,
-          product_name: item.variant.product.name,
-          size: item.variant.size,
-          quantity: item.quantity,
-          total_price: item.unit_price * item.quantity,
-          payment_method: cart.paymentMethod,
-          sale_date: saleDate,
-          sync_status: 'pending',
-          created_by: user?.id || null,
+      if (!isOnline && (normalizedReferral || selectedVoucherId)) {
+        throw new Error('Código de amigo e vouchers exigem ligação à internet para validação segura.');
+      }
+      if (selectedVoucherId && !voucherCanApply) {
+        throw new Error('O voucher de 15 € só pode ser usado numa compra com uma camisola.');
+      }
+
+      const checkoutId = Crypto.randomUUID();
+      const offlineRows = cart.items.map((item) => ({
+        local_id: Crypto.randomUUID(),
+        customer_name: cart.customerName || null,
+        product_variant_id: item.variant.id,
+        product_name: item.variant.product.name,
+        size: item.variant.size,
+        quantity: item.quantity,
+        total_price: selectedVoucherId ? 15 : item.unit_price * item.quantity,
+        payment_method: cart.paymentMethod,
+        sale_date: saleDate,
+        sync_status: 'pending' as const,
+        created_by: user?.id || null,
+      }));
+
+      for (const row of offlineRows) await saveOfflineSale(row);
+
+      if (isOnline) {
+        const { data, error } = await supabase.rpc('process_checkout', {
+          p_checkout_id: checkoutId,
+          p_customer_name: cart.customerName || null,
+          p_items: cart.items.map((item, index) => ({
+            local_id: offlineRows[index].local_id,
+            product_variant_id: item.variant.id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+          })),
+          p_payment_method: cart.paymentMethod,
+          p_sale_date: saleDate,
+          p_referral_code: normalizedReferral || null,
+          p_voucher_id: selectedVoucherId,
         });
 
-        // 2. Tentar sync imediato se online
-        if (isOnline) {
-          const { data, error } = await supabase.rpc('process_sale', {
-            p_local_id: localId,
-            p_customer_name: cart.customerName || null,
-            p_product_variant_id: item.variant.id,
-            p_quantity: item.quantity,
-            p_total_price: item.unit_price * item.quantity,
-            p_payment_method: cart.paymentMethod,
-            p_sale_date: saleDate,
-            p_created_by: user?.id,
-          });
+        const checkoutRpcUnavailable = error?.code === 'PGRST202'
+          || error?.message?.includes('process_checkout');
 
-          if (!error && data?.success) {
-            await updateSaleStatus(localId, 'synced');
-          } else {
-            await updateSaleStatus(localId, 'error');
+        if (checkoutRpcUnavailable && !normalizedReferral && !selectedVoucherId) {
+          // Compatibilidade durante o rollout: mantém vendas normais ativas
+          // até a migração de referrals ser aplicada no Supabase.
+          for (const row of offlineRows) {
+            const legacy = await supabase.rpc('process_sale', {
+              p_local_id: row.local_id,
+              p_customer_name: row.customer_name,
+              p_product_variant_id: row.product_variant_id,
+              p_quantity: row.quantity,
+              p_total_price: row.total_price,
+              p_payment_method: row.payment_method,
+              p_sale_date: row.sale_date,
+              p_created_by: user?.id,
+            });
+            if (legacy.error || !legacy.data?.success) {
+              await updateSaleStatus(row.local_id, 'error');
+              throw new Error(legacy.error?.message || 'Não foi possível confirmar a venda.');
+            }
           }
+        } else if (error || !data?.success) {
+          for (const row of offlineRows) await updateSaleStatus(row.local_id, 'error');
+          throw new Error(error?.message || data?.error || 'Não foi possível confirmar a venda.');
         }
+        for (const row of offlineRows) await updateSaleStatus(row.local_id, 'synced');
       }
 
       // Invalidar queries para atualizar UI
       queryClient.invalidateQueries({ queryKey: ['sales-today'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['available-vouchers'] });
+      queryClient.invalidateQueries({ queryKey: ['rewards'] });
       
       Alert.alert(
         'Venda Registada!', 
         isOnline ? 'Venda sincronizada com sucesso.' : 'Guardada offline. Será sincronizada quando tiveres rede.',
-        [{ text: 'OK', onPress: () => { cart.clearCart(); router.back(); } }]
+        [{ text: 'OK', onPress: () => {
+          cart.clearCart();
+          setReferralCode('');
+          setSelectedVoucherId(null);
+          router.back();
+        } }]
       );
     } catch (e: any) {
       Alert.alert('Erro', e.message || 'Ocorreu um erro ao registar a venda.');
@@ -248,8 +306,12 @@ export default function NovaVendaScreen() {
           <View style={styles.footer}>
             <View style={styles.footerRow}>
               <Text style={styles.totalLabel}>Total a Pagar</Text>
-              <Text style={styles.totalValue}>{cart.total().toFixed(2)} €</Text>
+              <Text style={styles.totalValue}>{checkoutTotal.toFixed(2)} €</Text>
             </View>
+
+            {selectedVoucher && voucherCanApply && (
+              <Text style={styles.discountNote}>Voucher aplicado: esta camisola fica por 15,00 €.</Text>
+            )}
             
             <View style={styles.paymentMethods}>
               {PAYMENT_METHODS.map(method => (
@@ -272,6 +334,48 @@ export default function NovaVendaScreen() {
                value={cart.customerName}
                onChangeText={cart.setCustomerName}
             />
+
+            <TextInput
+              style={[styles.input, { marginBottom: 12 }]}
+              placeholder="Código de amigo (opcional)"
+              placeholderTextColor={c.textTertiary}
+              value={referralCode}
+              onChangeText={(value) => setReferralCode(value.toUpperCase())}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+
+            {vouchers.length > 0 && (
+              <View style={styles.voucherSection}>
+                <Text style={styles.voucherTitle}>Voucher de 15 €</Text>
+                <TouchableOpacity
+                  style={[styles.voucherOption, !selectedVoucherId && styles.voucherOptionActive]}
+                  onPress={() => setSelectedVoucherId(null)}
+                >
+                  <Text style={styles.voucherOptionText}>○ Não aplicar voucher</Text>
+                </TouchableOpacity>
+                {vouchers.map((voucher) => (
+                  <TouchableOpacity
+                    key={voucher.id}
+                    style={[styles.voucherOption, selectedVoucherId === voucher.id && styles.voucherOptionActive]}
+                    onPress={() => {
+                      if (!voucherCanApply) {
+                        Alert.alert('Voucher de 15 €', 'Mantém apenas uma camisola com quantidade 1 no carrinho.');
+                        return;
+                      }
+                      setSelectedVoucherId(voucher.id);
+                    }}
+                  >
+                    <Text style={styles.voucherOptionText}>
+                      {selectedVoucherId === voucher.id ? '●' : '○'} {voucher.code}
+                    </Text>
+                    <Text style={styles.voucherExpiry}>
+                      Expira em {new Date(voucher.expires_at).toLocaleDateString('pt-PT')}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <TouchableOpacity 
               style={[styles.checkoutBtn, finishing && { opacity: 0.7 }]}
@@ -401,6 +505,13 @@ function createStyles(c: typeof Colors.light) {
     footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
     totalLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: c.textSecondary },
     totalValue: { fontFamily: 'Inter_700Bold', fontSize: 28, color: c.primary },
+    discountNote: { fontFamily: 'Inter_500Medium', fontSize: 13, color: c.success, marginTop: -8, marginBottom: 12 },
+    voucherSection: { gap: 7, marginBottom: 14 },
+    voucherTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: c.text },
+    voucherOption: { borderWidth: 1, borderColor: c.border, borderRadius: 10, padding: 10, gap: 2 },
+    voucherOptionActive: { borderColor: c.primary, backgroundColor: c.primaryLight },
+    voucherOptionText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: c.text },
+    voucherExpiry: { fontFamily: 'Inter_400Regular', fontSize: 11, color: c.textSecondary, marginLeft: 18 },
     paymentMethods: { flexDirection: 'row', gap: 8, marginBottom: 16 },
     paymentBtn: {
       flex: 1,

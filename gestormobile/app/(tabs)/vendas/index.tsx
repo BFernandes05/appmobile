@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +29,7 @@ async function fetchTodaySales(userId: string, isAdmin: boolean): Promise<Sale[]
       )
     `)
     .eq('sync_status', 'synced')
+    .is('cancelled_at', null)
     .gte('sale_date', today.toISOString())
     .order('sale_date', { ascending: false });
 
@@ -45,6 +46,7 @@ export default function VendasScreen() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const { user, isAdmin } = useAuth();
+  const queryClient = useQueryClient();
   const [pendingCount, setPendingCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -94,6 +96,28 @@ export default function VendasScreen() {
   const totalHoje = sales.reduce((s, v) => s + v.total_price, 0);
   const styles = createStyles(c);
 
+  const cancelCheckout = (checkoutId: string) => Alert.alert(
+    'Cancelar venda',
+    'O stock será reposto e o referral associado será descontado. Continuar?',
+    [
+      { text: 'Voltar', style: 'cancel' },
+      { text: 'Cancelar venda', style: 'destructive', onPress: async () => {
+        const { data, error } = await supabase.rpc('cancel_checkout', { p_checkout_id: checkoutId });
+        if (error || !data?.success) {
+          Alert.alert('Erro', error?.message || 'Não foi possível cancelar a venda.');
+          return;
+        }
+        await Promise.all([
+          refetch(),
+          queryClient.invalidateQueries({ queryKey: ['products'] }),
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+          queryClient.invalidateQueries({ queryKey: ['rewards'] }),
+        ]);
+        Alert.alert('Venda cancelada', 'Stock e contagem de referrals foram corrigidos.');
+      } },
+    ],
+  );
+
   const renderSale = ({ item }: { item: Sale }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -116,6 +140,11 @@ export default function VendasScreen() {
       <Text style={styles.saleDate}>
         {new Date(item.sale_date).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
       </Text>
+      {isAdmin && item.checkout_id && (
+        <TouchableOpacity style={styles.cancelButton} onPress={() => cancelCheckout(item.checkout_id!)}>
+          <Text style={styles.cancelButtonText}>Cancelar / Devolver</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -235,6 +264,8 @@ function createStyles(c: typeof Colors.light) {
     paymentBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
     paymentText: { fontFamily: 'Inter_400Regular', fontSize: 11, color: c.textSecondary },
     saleDate: { fontFamily: 'Inter_400Regular', fontSize: 12, color: c.textTertiary },
+    cancelButton: { alignSelf: 'flex-start', backgroundColor: c.dangerLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+    cancelButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: c.danger },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     emptyState: { alignItems: 'center', paddingTop: 80, gap: 12 },
     emptyEmoji: { fontSize: 52 },

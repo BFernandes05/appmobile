@@ -49,12 +49,23 @@ export function useAuth() {
     if (error) throw error;
   }, []);
 
+  const signUpCustomer = useCallback(async (fullName: string, email: string, password: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } },
+    });
+    if (error) throw error;
+    return data;
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
 
   const isAdmin = state.profile?.role === 'admin';
   const isStaff = state.profile?.role === 'staff';
+  const isCustomer = state.profile?.role === 'customer';
 
-  return { ...state, signIn, signOut, isAdmin, isStaff };
+  return { ...state, signIn, signUpCustomer, signOut, isAdmin, isStaff, isCustomer };
 }

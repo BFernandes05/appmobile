@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS public.referral_events (
   CHECK (referrer_id <> buyer_id)
 );
 
+ALTER TABLE public.referral_events
+  ADD COLUMN IF NOT EXISTS shirt_quantity INTEGER NOT NULL DEFAULT 1
+  CHECK (shirt_quantity > 0);
+
 CREATE TABLE IF NOT EXISTS public.vouchers (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -43,6 +47,10 @@ CREATE TABLE IF NOT EXISTS public.vouchers (
   notified_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Uma compra com 4 camisolas pode gerar 2 vouchers no mesmo evento.
+ALTER TABLE public.vouchers
+  DROP CONSTRAINT IF EXISTS vouchers_referral_event_id_key;
 
 ALTER TABLE public.sales
   ADD COLUMN IF NOT EXISTS checkout_id UUID,
@@ -106,13 +114,21 @@ DECLARE
   v_referrer_id UUID;
   v_referral_event_id UUID;
   v_reward_voucher_id UUID;
+  v_old_count INTEGER;
   v_new_count INTEGER;
+  v_rewards_to_create INTEGER;
   v_original_total NUMERIC(10,2);
   v_final_total NUMERIC(10,2);
   v_total_quantity INTEGER;
 BEGIN
   IF v_user_id IS NULL THEN
     RAISE EXCEPTION 'Sessão inválida ou expirada.';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = v_user_id AND role IN ('admin', 'staff')
+  ) THEN
+    RAISE EXCEPTION 'Apenas a equipa pode confirmar vendas diretas.';
   END IF;
   IF p_checkout_id IS NULL OR p_items IS NULL OR jsonb_typeof(p_items) <> 'array'
      OR jsonb_array_length(p_items) = 0 THEN
@@ -216,12 +232,17 @@ BEGIN
   END IF;
 
   IF v_referrer_id IS NOT NULL THEN
-    INSERT INTO public.referral_events(checkout_id, referrer_id, buyer_id)
-    VALUES (p_checkout_id, v_referrer_id, v_user_id)
+    INSERT INTO public.referral_events(checkout_id, referrer_id, buyer_id, shirt_quantity)
+    VALUES (p_checkout_id, v_referrer_id, v_user_id, v_total_quantity)
     RETURNING id INTO v_referral_event_id;
 
+    SELECT referral_count INTO v_old_count
+    FROM public.profiles
+    WHERE id = v_referrer_id
+    FOR UPDATE;
+
     UPDATE public.profiles
-    SET referral_count = referral_count + 1
+    SET referral_count = referral_count + v_total_quantity
     WHERE id = v_referrer_id
     RETURNING referral_count INTO v_new_count;
 
@@ -229,7 +250,9 @@ BEGIN
     SET referral_event_id = v_referral_event_id
     WHERE checkout_id = p_checkout_id;
 
-    IF MOD(v_new_count, 2) = 0 THEN
+    v_rewards_to_create := FLOOR(v_new_count / 2.0) - FLOOR(v_old_count / 2.0);
+    FOR v_item IN SELECT generate_series(1, v_rewards_to_create)
+    LOOP
       INSERT INTO public.vouchers(
         user_id, code, expires_at, discount_type, referral_event_id
       ) VALUES (
@@ -240,7 +263,7 @@ BEGIN
         v_referral_event_id
       )
       RETURNING id INTO v_reward_voucher_id;
-    END IF;
+    END LOOP;
   END IF;
 
   RETURN jsonb_build_object(
@@ -313,7 +336,7 @@ BEGIN
     WHERE id = v_event.id;
 
     UPDATE public.profiles
-    SET referral_count = GREATEST(referral_count - 1, 0)
+    SET referral_count = GREATEST(referral_count - v_event.shirt_quantity, 0)
     WHERE id = v_event.referrer_id;
 
     UPDATE public.vouchers

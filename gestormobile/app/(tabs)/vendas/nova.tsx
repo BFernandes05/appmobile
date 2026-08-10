@@ -31,7 +31,7 @@ async function fetchActiveProducts(): Promise<Product[]> {
 export default function NovaVendaScreen() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
-  const { user } = useAuth();
+  const { user, isCustomer } = useAuth();
   const queryClient = useQueryClient();
   const cart = useCartStore();
   
@@ -40,6 +40,8 @@ export default function NovaVendaScreen() {
   const [finishing, setFinishing] = useState(false);
   const [referralCode, setReferralCode] = useState('');
   const [selectedVoucherId, setSelectedVoucherId] = useState<string | null>(null);
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
 
   const { data: products = [] } = useQuery({
     queryKey: ['products-active-sales'],
@@ -47,15 +49,17 @@ export default function NovaVendaScreen() {
   });
 
   const { data: vouchers = [] } = useQuery({
-    queryKey: ['available-vouchers', user?.id],
+    queryKey: ['available-vouchers', user?.id, isCustomer],
     queryFn: async (): Promise<Voucher[]> => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('vouchers')
         .select('*')
         .eq('is_used', false)
         .is('revoked_at', null)
         .gt('expires_at', new Date().toISOString())
         .order('expires_at');
+      if (isCustomer) query = query.is('reserved_order_id', null);
+      const { data, error } = await query;
       if (error) throw error;
       return data as Voucher[];
     },
@@ -95,6 +99,36 @@ export default function NovaVendaScreen() {
       const isOnline = netInfo.isConnected;
       const saleDate = new Date().toISOString();
       const normalizedReferral = referralCode.trim().toUpperCase();
+
+      if (isCustomer) {
+        if (!isOnline) throw new Error('É necessária ligação à internet para enviar o pedido.');
+        if (cart.paymentMethod === 'Dinheiro') throw new Error('Escolhe MB Way, Transferência ou Stripe.');
+        if (!customerPhone.trim() || !deliveryAddress.trim()) throw new Error('Preenche o contacto e a morada de entrega.');
+        if (selectedVoucherId && !voucherCanApply) {
+          throw new Error('O voucher de 15 € só pode ser usado numa compra com uma camisola.');
+        }
+        const { data, error } = await supabase.rpc('create_customer_order', {
+          p_items: cart.items.map((item) => ({
+            product_variant_id: item.variant.id,
+            quantity: item.quantity,
+          })),
+          p_payment_method: cart.paymentMethod,
+          p_customer_phone: customerPhone.trim(),
+          p_delivery_address: deliveryAddress.trim(),
+          p_referral_code: normalizedReferral || null,
+          p_voucher_id: selectedVoucherId,
+        });
+        if (error || !data?.success) throw new Error(error?.message || 'Não foi possível enviar o pedido.');
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['customer-orders'] }),
+          queryClient.invalidateQueries({ queryKey: ['products'] }),
+          queryClient.invalidateQueries({ queryKey: ['available-vouchers'] }),
+        ]);
+        Alert.alert('Pedido enviado', 'A equipa vai validar o pagamento e confirmar a venda.', [{
+          text: 'OK', onPress: () => { cart.clearCart(); setReferralCode(''); setSelectedVoucherId(null); setCustomerPhone(''); setDeliveryAddress(''); router.back(); },
+        }]);
+        return;
+      }
 
       if (!isOnline && (normalizedReferral || selectedVoucherId)) {
         throw new Error('Código de amigo e vouchers exigem ligação à internet para validação segura.');
@@ -281,7 +315,7 @@ export default function NovaVendaScreen() {
                         <Text style={styles.qtyBtnText}>+</Text>
                       </TouchableOpacity>
                     </View>
-                    <View style={styles.priceEditContainer}>
+                    {!isCustomer && <View style={styles.priceEditContainer}>
                        <TextInput
                           style={styles.priceInput}
                           value={item.unit_price.toString()}
@@ -292,7 +326,7 @@ export default function NovaVendaScreen() {
                           keyboardType="decimal-pad"
                        />
                        <Text style={styles.euroSymbol}>€</Text>
-                    </View>
+                    </View>}
                   </View>
                 </View>
               ))
@@ -314,7 +348,7 @@ export default function NovaVendaScreen() {
             )}
             
             <View style={styles.paymentMethods}>
-              {PAYMENT_METHODS.map(method => (
+              {PAYMENT_METHODS.filter(method => !isCustomer || method !== 'Dinheiro').map(method => (
                 <TouchableOpacity
                   key={method}
                   style={[styles.paymentBtn, cart.paymentMethod === method && styles.paymentBtnActive]}
@@ -327,13 +361,22 @@ export default function NovaVendaScreen() {
               ))}
             </View>
             
-            <TextInput
+            {!isCustomer && <TextInput
                style={[styles.input, { marginBottom: 16 }]}
                placeholder="Nome do cliente (opcional)"
                placeholderTextColor={c.textTertiary}
                value={cart.customerName}
                onChangeText={cart.setCustomerName}
-            />
+            />}
+
+            {isCustomer && <>
+              <TextInput style={[styles.input, { marginBottom: 12 }]} placeholder="Contacto telefónico"
+                placeholderTextColor={c.textTertiary} value={customerPhone} onChangeText={setCustomerPhone}
+                keyboardType="phone-pad" />
+              <TextInput style={[styles.input, { marginBottom: 12 }]} placeholder="Morada completa de entrega"
+                placeholderTextColor={c.textTertiary} value={deliveryAddress} onChangeText={setDeliveryAddress}
+                multiline />
+            </>}
 
             <TextInput
               style={[styles.input, { marginBottom: 12 }]}
@@ -383,7 +426,7 @@ export default function NovaVendaScreen() {
               disabled={finishing}
             >
               <Text style={styles.checkoutBtnText}>
-                {finishing ? 'A registar...' : 'Finalizar Venda'}
+                {finishing ? (isCustomer ? 'A enviar...' : 'A registar...') : (isCustomer ? 'Enviar pedido' : 'Finalizar Venda')}
               </Text>
             </TouchableOpacity>
           </View>

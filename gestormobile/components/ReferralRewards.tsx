@@ -49,10 +49,10 @@ export function ReferralRewards({ colors }: { colors: typeof Colors.light }) {
       </TouchableOpacity>
       <View style={styles.progressHeader}>
         <Text style={styles.progressTitle}>Próximo voucher</Text>
-        <Text style={styles.progressCount}>{progress}/2 vendas</Text>
+        <Text style={styles.progressCount}>{progress}/2 camisolas</Text>
       </View>
       <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progress * 50}%` }]} /></View>
-      <Text style={styles.progressHint}>{progress === 1 ? 'Falta apenas uma venda indicada.' : 'Partilha o teu código para começar.'}</Text>
+      <Text style={styles.progressHint}>{progress === 1 ? 'Falta apenas uma camisola indicada.' : 'Partilha o teu código para começar.'}</Text>
     </View>
 
     <View style={styles.card}>

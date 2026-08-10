@@ -1,7 +1,7 @@
 // GestorMobile — TypeScript Types
 // Tipos que espelham as tabelas do Supabase
 
-export type UserRole = 'admin' | 'staff';
+export type UserRole = 'admin' | 'staff' | 'customer';
 
 export interface Profile {
   id: string;
@@ -25,6 +25,7 @@ export interface Voucher {
   used_at: string | null;
   revoked_at: string | null;
   notified_at: string | null;
+  reserved_order_id: string | null;
   created_at: string;
 }
 
@@ -85,6 +86,35 @@ export interface Sale {
   voucher_id: string | null;
   cancelled_at: string | null;
   variant?: ProductVariant & { product?: Product };
+}
+
+export type CustomerOrderStatus = 'pending' | 'confirmed' | 'cancelled';
+
+export interface CustomerOrderItem {
+  id: string;
+  order_id: string;
+  product_variant_id: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  variant?: ProductVariant & { product?: Product };
+}
+
+export interface CustomerOrder {
+  id: string;
+  customer_id: string;
+  status: CustomerOrderStatus;
+  payment_method: Exclude<PaymentMethod, 'Dinheiro'>;
+  customer_phone: string;
+  delivery_address: string;
+  referral_code: string | null;
+  voucher_id: string | null;
+  original_total: number;
+  final_total: number;
+  created_at: string;
+  confirmed_at: string | null;
+  customer?: Pick<Profile, 'full_name' | 'email'>;
+  items?: CustomerOrderItem[];
 }
 
 // Carrinho de venda (estado local Zustand)

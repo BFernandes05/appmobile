@@ -11,7 +11,7 @@ WHERE referral_code IS NULL;
 
 ALTER TABLE public.profiles
   ALTER COLUMN referral_code SET DEFAULT (
-    'RB-' || UPPER(SUBSTRING(REPLACE(uuid_generate_v4()::TEXT, '-', '') FROM 1 FOR 12))
+    'RB-' || UPPER(SUBSTRING(REPLACE(public.uuid_generate_v4()::TEXT, '-', '') FROM 1 FOR 12))
   ),
   ALTER COLUMN referral_code SET NOT NULL;
 
@@ -19,7 +19,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS profiles_referral_code_unique
   ON public.profiles (UPPER(referral_code));
 
 CREATE TABLE IF NOT EXISTS public.referral_events (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT public.uuid_generate_v4(),
   checkout_id UUID NOT NULL UNIQUE,
   referrer_id UUID NOT NULL REFERENCES public.profiles(id),
   buyer_id UUID NOT NULL REFERENCES public.profiles(id),
@@ -34,7 +34,7 @@ ALTER TABLE public.referral_events
   CHECK (shirt_quantity > 0);
 
 CREATE TABLE IF NOT EXISTS public.vouchers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT public.uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   code TEXT NOT NULL UNIQUE,
   is_used BOOLEAN NOT NULL DEFAULT FALSE,
@@ -257,7 +257,7 @@ BEGIN
         user_id, code, expires_at, discount_type, referral_event_id
       ) VALUES (
         v_referrer_id,
-        'V15-' || UPPER(SUBSTRING(REPLACE(uuid_generate_v4()::TEXT, '-', '') FROM 1 FOR 10)),
+        'V15-' || UPPER(SUBSTRING(REPLACE(public.uuid_generate_v4()::TEXT, '-', '') FROM 1 FOR 10)),
         NOW() + INTERVAL '90 days',
         'FIXED_PRICE_15',
         v_referral_event_id

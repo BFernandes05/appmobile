@@ -49,7 +49,7 @@ async function fetchDashboardData() {
 export default function DashboardScreen() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
-  const { isAdmin } = useAuth();
+  const { isAdmin, signOut } = useAuth();
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -58,6 +58,26 @@ export default function DashboardScreen() {
   });
 
   const styles = createStyles(c);
+
+  const handleSignOut = () => {
+    const finish = async () => {
+      try {
+        await signOut();
+      } catch {
+        Alert.alert('Erro', 'Não foi possível terminar a sessão. Tenta novamente.');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Queres terminar a sessão?')) void finish();
+      return;
+    }
+
+    Alert.alert('Terminar sessão', 'Queres terminar a sessão?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Terminar', style: 'destructive', onPress: () => void finish() },
+    ]);
+  };
 
   const exportCSV = async () => {
     try {
@@ -131,9 +151,19 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Dashboard</Text>
-        {isAdmin && <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}>
-          <Text style={styles.exportBtnText}>📥 Exportar CSV</Text>
-        </TouchableOpacity>}
+        <View style={styles.headerActions}>
+          {isAdmin && <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}>
+            <Text style={styles.exportBtnText}>📥 Exportar CSV</Text>
+          </TouchableOpacity>}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Terminar sessão"
+            style={styles.signOutBtn}
+            onPress={handleSignOut}
+          >
+            <Text style={styles.signOutBtnText}>↪ Terminar sessão</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -202,8 +232,11 @@ function createStyles(c: typeof Colors.light) {
       paddingBottom: 12,
     },
     headerTitle: { fontFamily: 'Inter_700Bold', fontSize: 28, color: c.text, letterSpacing: -0.5 },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     exportBtn: { backgroundColor: c.surfaceSecondary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
     exportBtnText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: c.text },
+    signOutBtn: { borderWidth: 1, borderColor: c.border, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+    signOutBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: c.danger },
     scroll: { padding: 20, paddingBottom: 100, gap: 20 },
     kpiGrid: { flexDirection: 'row', gap: 12 },
     kpiCard: {

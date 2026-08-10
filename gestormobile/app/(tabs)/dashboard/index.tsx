@@ -34,7 +34,10 @@ async function fetchDashboardData() {
   today.setHours(0, 0, 0, 0);
 
   const [salesRes, reservationsRes, monthlyRes] = await Promise.all([
-    supabase.from('sales').select('total_price, quantity').eq('sync_status', 'synced').gte('sale_date', today.toISOString()),
+    supabase.from('sales').select('total_price, quantity')
+      .eq('sync_status', 'synced')
+      .is('cancelled_at', null)
+      .gte('sale_date', today.toISOString()),
     supabase.from('reservations').select('id', { count: 'exact' }).eq('status', 'Pendente'),
     supabase.from('monthly_sales_summary').select('*').limit(6)
   ]);
@@ -84,6 +87,7 @@ export default function DashboardScreen() {
       const { data: allSales, error } = await supabase
         .from('sales')
         .select(`id, sale_date, total_price, quantity, payment_method, sync_status, product_variants(size, products(name))`)
+        .is('cancelled_at', null)
         .order('sale_date', { ascending: false });
         
       if (error) throw error;

@@ -345,6 +345,16 @@ BEGIN
   END IF;
 
   UPDATE public.sales SET cancelled_at = NOW() WHERE checkout_id = p_checkout_id;
+  -- Quando a venda nasceu no lado cliente, manter também o estado do pedido
+  -- coerente. SQL dinâmico preserva a compatibilidade durante a instalação,
+  -- antes de customer_orders existir.
+  IF to_regclass('public.customer_orders') IS NOT NULL THEN
+    EXECUTE $sql$
+      UPDATE public.customer_orders
+      SET status = 'cancelled', cancelled_at = NOW(), cancelled_by = auth.uid()
+      WHERE id = $1 AND status = 'confirmed'
+    $sql$ USING p_checkout_id;
+  END IF;
   RETURN jsonb_build_object('success', true, 'checkout_id', p_checkout_id);
 END;
 $$;

@@ -41,6 +41,7 @@ REVOKE ALL ON FUNCTION private.is_team() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.is_team() TO authenticated;
 
 DROP POLICY IF EXISTS "Profiles são visíveis para utilizadores autenticados" ON public.profiles;
+DROP POLICY IF EXISTS "Perfil próprio ou equipa" ON public.profiles;
 CREATE POLICY "Perfil próprio ou equipa" ON public.profiles FOR SELECT TO authenticated
 USING (id = (SELECT auth.uid()) OR (SELECT private.is_team()));
 
@@ -101,18 +102,23 @@ GRANT SELECT ON public.customer_orders, public.customer_order_items TO authentic
 
 -- Clientes nunca escrevem diretamente nestas tabelas: usam RPCs atómicas.
 DROP POLICY IF EXISTS "Todos podem inserir vendas" ON public.sales;
+DROP POLICY IF EXISTS "Equipa insere vendas" ON public.sales;
 CREATE POLICY "Equipa insere vendas" ON public.sales FOR INSERT TO authenticated
 WITH CHECK ((SELECT private.is_team()));
 DROP POLICY IF EXISTS "Todos podem inserir reservas" ON public.reservations;
+DROP POLICY IF EXISTS "Equipa insere reservas" ON public.reservations;
 CREATE POLICY "Equipa insere reservas" ON public.reservations FOR INSERT TO authenticated
 WITH CHECK ((SELECT private.is_team()));
 DROP POLICY IF EXISTS "Reservas visíveis para todos os autenticados" ON public.reservations;
+DROP POLICY IF EXISTS "Equipa consulta reservas" ON public.reservations;
 CREATE POLICY "Equipa consulta reservas" ON public.reservations FOR SELECT TO authenticated
 USING ((SELECT private.is_team()));
 DROP POLICY IF EXISTS "Todos podem atualizar reservas" ON public.reservations;
+DROP POLICY IF EXISTS "Equipa atualiza reservas" ON public.reservations;
 CREATE POLICY "Equipa atualiza reservas" ON public.reservations FOR UPDATE TO authenticated
 USING ((SELECT private.is_team())) WITH CHECK ((SELECT private.is_team()));
 DROP POLICY IF EXISTS "Todos podem apagar reservas (ao converter em venda)" ON public.reservations;
+DROP POLICY IF EXISTS "Equipa remove reservas" ON public.reservations;
 CREATE POLICY "Equipa remove reservas" ON public.reservations FOR DELETE TO authenticated
 USING ((SELECT private.is_team()));
 

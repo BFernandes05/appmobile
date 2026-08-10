@@ -45,7 +45,7 @@ CREATE POLICY "Perfil próprio ou equipa" ON public.profiles FOR SELECT TO authe
 USING (id = (SELECT auth.uid()) OR (SELECT private.is_team()));
 
 CREATE TABLE IF NOT EXISTS public.customer_orders (
-  id UUID PRIMARY KEY DEFAULT public.uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   customer_id UUID NOT NULL REFERENCES public.profiles(id),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'cancelled')),
   payment_method TEXT NOT NULL CHECK (payment_method IN ('MB Way', 'Transferência', 'Stripe')),
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS public.customer_orders (
 );
 
 CREATE TABLE IF NOT EXISTS public.customer_order_items (
-  id UUID PRIMARY KEY DEFAULT public.uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id UUID NOT NULL REFERENCES public.customer_orders(id) ON DELETE CASCADE,
   product_variant_id UUID NOT NULL REFERENCES public.product_variants(id),
   quantity INTEGER NOT NULL CHECK (quantity > 0),
@@ -174,7 +174,7 @@ BEGIN
   SELECT * INTO v_reservation FROM public.reservations WHERE id=p_reservation_id FOR UPDATE;
   IF NOT FOUND OR v_reservation.status <> 'Pendente' THEN RETURN json_build_object('success',FALSE,'error','Reserva não encontrada ou já tratada.'); END IF;
   INSERT INTO public.sales(local_id,customer_name,product_variant_id,quantity,total_price,payment_method,sale_date,sync_status,created_by)
-  VALUES(public.uuid_generate_v4(),v_reservation.customer_name,v_reservation.product_variant_id,v_reservation.quantity,
+  VALUES(gen_random_uuid(),v_reservation.customer_name,v_reservation.product_variant_id,v_reservation.quantity,
     v_reservation.total_price,p_payment_method,NOW(),'synced',auth.uid()) RETURNING id INTO v_sale_id;
   DELETE FROM public.reservations WHERE id=p_reservation_id;
   RETURN json_build_object('success',TRUE,'sale_id',v_sale_id);
@@ -196,7 +196,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_user_id UUID := auth.uid();
-  v_order_id UUID := public.uuid_generate_v4();
+  v_order_id UUID := gen_random_uuid();
   v_item RECORD;
   v_variant public.product_variants%ROWTYPE;
   v_voucher public.vouchers%ROWTYPE;
@@ -311,7 +311,7 @@ BEGIN
       local_id, checkout_id, customer_name, product_variant_id, quantity, original_total_price,
       total_price, payment_method, sale_date, sync_status, created_by, voucher_id
     ) VALUES (
-      public.uuid_generate_v4(), p_order_id,
+      gen_random_uuid(), p_order_id,
       (SELECT COALESCE(full_name, email) FROM public.profiles WHERE id = v_order.customer_id),
       v_item.product_variant_id, v_item.quantity, v_item.line_total,
       CASE WHEN v_order.voucher_id IS NOT NULL THEN 15.00 ELSE v_item.line_total END,
@@ -335,7 +335,7 @@ BEGIN
       v_rewards := FLOOR(v_new_count / 2.0) - FLOOR(v_old_count / 2.0);
       FOR i IN 1..v_rewards LOOP
         INSERT INTO public.vouchers(user_id, code, expires_at, discount_type, referral_event_id)
-        VALUES (v_referrer, 'V15-' || UPPER(SUBSTRING(REPLACE(public.uuid_generate_v4()::TEXT, '-', '') FROM 1 FOR 10)),
+        VALUES (v_referrer, 'V15-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT, '-', '') FROM 1 FOR 10)),
           NOW() + INTERVAL '90 days', 'FIXED_PRICE_15', v_event);
       END LOOP;
     END IF;

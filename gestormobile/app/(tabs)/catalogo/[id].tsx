@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator, Image, Platform, useColorScheme,
+  TextInput, Alert, ActivityIndicator, Image, Platform, useColorScheme, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
@@ -37,6 +37,8 @@ async function fetchProduct(id: string): Promise<Product> {
 
 export default function ProductDetailScreen() {
   const colorScheme = useColorScheme();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 820;
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isAdmin } = useAuth();
@@ -163,7 +165,7 @@ export default function ProductDetailScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.pageScroll}>
         {/* Header */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -176,12 +178,18 @@ export default function ProductDetailScreen() {
           )}
         </View>
 
+        <View style={[styles.productLayout, isWide && styles.productLayoutWide]}>
         {/* Imagem */}
-        <TouchableOpacity onPress={handleImagePick} disabled={!isAdmin || uploadingImage} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[styles.imagePanel, isWide && styles.imagePanelWide]}
+          onPress={handleImagePick}
+          disabled={!isAdmin || uploadingImage}
+          activeOpacity={0.8}
+        >
           {product.image_url ? (
-            <Image source={{ uri: product.image_url }} style={styles.heroImage} resizeMode="cover" />
+            <Image source={{ uri: product.image_url }} style={[styles.heroImage, isWide && styles.heroImageWide]} resizeMode="contain" />
           ) : (
-            <View style={[styles.heroImage, styles.heroPlaceholder]}>
+            <View style={[styles.heroImage, isWide && styles.heroImageWide, styles.heroPlaceholder]}>
               <Text style={styles.heroPlaceholderEmoji}>👕</Text>
               {isAdmin && <Text style={styles.heroPlaceholderText}>Toca para adicionar imagem</Text>}
             </View>
@@ -194,7 +202,7 @@ export default function ProductDetailScreen() {
           )}
         </TouchableOpacity>
 
-        <View style={styles.content}>
+        <View style={[styles.content, isWide && styles.contentWide]}>
           <View style={styles.editHeading}>
             <View style={styles.editHeadingText}>
               <Text style={styles.editEyebrow}>{isAdmin ? 'EDITAR ARTIGO' : 'ARTIGO'}</Text>
@@ -267,6 +275,7 @@ export default function ProductDetailScreen() {
             ))
           )}
         </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -275,6 +284,7 @@ export default function ProductDetailScreen() {
 function createStyles(c: typeof Colors.light) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
+    pageScroll: { flexGrow: 1 },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     headerRow: {
       flexDirection: 'row',
@@ -282,6 +292,9 @@ function createStyles(c: typeof Colors.light) {
       alignItems: 'center',
       paddingHorizontal: 20,
       paddingVertical: 12,
+      width: '100%',
+      maxWidth: 1500,
+      alignSelf: 'center',
     },
     backBtn: { padding: 8 },
     backIcon: { fontSize: 32, color: c.text, lineHeight: 34 },
@@ -292,7 +305,12 @@ function createStyles(c: typeof Colors.light) {
       paddingVertical: 8,
     },
     deactivateText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: c.danger },
-    heroImage: { width: '100%', height: 260 },
+    productLayout: { width: '100%', maxWidth: 1500, alignSelf: 'center' },
+    productLayoutWide: { flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 24, paddingBottom: 32, gap: 24 },
+    imagePanel: { position: 'relative', overflow: 'hidden', backgroundColor: c.surfaceSecondary },
+    imagePanelWide: { flex: 1.55, minHeight: 600, borderRadius: 20, borderWidth: 1, borderColor: c.border },
+    heroImage: { width: '100%', height: 320, backgroundColor: c.surfaceSecondary },
+    heroImageWide: { height: '100%', minHeight: 600 },
     heroPlaceholder: {
       backgroundColor: c.surfaceSecondary,
       alignItems: 'center',
@@ -314,10 +332,11 @@ function createStyles(c: typeof Colors.light) {
     },
     uploadText: { fontFamily: 'Inter_500Medium', fontSize: 15, color: '#fff' },
     content: { padding: 20, gap: 16 },
+    contentWide: { flex: 0.85, alignSelf: 'stretch', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 20, padding: 28, shadowColor: c.shadow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 1, shadowRadius: 18, elevation: 4 },
     editHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
     editHeadingText: { flex: 1, gap: 4 },
     editEyebrow: { fontFamily: 'Inter_700Bold', fontSize: 11, letterSpacing: 1, color: c.primary },
-    productName: { fontFamily: 'Inter_700Bold', fontSize: 24, color: c.text, letterSpacing: -0.5 },
+    productName: { fontFamily: 'Inter_700Bold', fontSize: 28, lineHeight: 34, color: c.text, letterSpacing: -0.5 },
     categoryBadge: {
       alignSelf: 'flex-start',
       backgroundColor: c.primaryLight,
@@ -339,6 +358,7 @@ function createStyles(c: typeof Colors.light) {
       padding: 16,
       borderWidth: 1,
       borderColor: c.border,
+      minHeight: 76,
     },
     variantInfo: { gap: 4 },
     variantSize: { fontFamily: 'Inter_700Bold', fontSize: 18, color: c.text },

@@ -36,6 +36,7 @@ export default function NovaReservaScreen() {
   const [totalPrice, setTotalPrice] = useState('');
   const [loading, setLoading] = useState(false);
   const [productSearch, setProductSearch] = useState('');
+  const [reservationDays, setReservationDays] = useState('1');
 
   const { data: products = [] } = useQuery({
     queryKey: ['products-active'],
@@ -84,6 +85,15 @@ export default function NovaReservaScreen() {
       Alert.alert('Preço inválido', 'Introduz um valor válido.');
       return;
     }
+    const days = parseInt(reservationDays, 10);
+    if (isNaN(days) || days < 1 || days > 90) {
+      Alert.alert('Duração inválida', 'Escolhe uma duração entre 1 e 90 dias.');
+      return;
+    }
+
+    const reservationDate = new Date();
+    const expiresAt = new Date(reservationDate);
+    expiresAt.setDate(expiresAt.getDate() + days);
 
     setLoading(true);
     try {
@@ -93,6 +103,8 @@ export default function NovaReservaScreen() {
         product_variant_id: selectedVariant.id,
         quantity: qty,
         total_price: price,
+        reservation_date: reservationDate.toISOString(),
+        expires_at: expiresAt.toISOString(),
         created_by: user?.id,
       });
       if (error) {
@@ -105,7 +117,7 @@ export default function NovaReservaScreen() {
       }
       queryClient.invalidateQueries({ queryKey: ['reservations'] });
       queryClient.invalidateQueries({ queryKey: ['products'] });
-      Alert.alert('✅ Reserva criada!', `Reserva para ${customerName.trim()} criada com sucesso. Válida por 24h.`, [
+      Alert.alert('✅ Reserva criada!', `Reserva para ${customerName.trim()} criada com sucesso. Válida por ${days} ${days === 1 ? 'dia' : 'dias'}.`, [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
@@ -163,6 +175,9 @@ export default function NovaReservaScreen() {
           {filteredProducts.slice(0, 5).map((product) => (
             <TouchableOpacity
               key={product.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Selecionar ${product.name}`}
+              accessibilityState={{ selected: selectedProduct?.id === product.id }}
               style={[styles.productOption, selectedProduct?.id === product.id && styles.productOptionActive]}
               onPress={() => {
                 setSelectedProduct(product);
@@ -237,6 +252,35 @@ export default function NovaReservaScreen() {
           </View>
         )}
 
+        <View style={styles.field}>
+          <Text style={styles.label}>Duração da reserva *</Text>
+          <Text style={styles.fieldHint}>Durante este período o stock fica reservado.</Text>
+          <View style={styles.daysGrid}>
+            {[1, 2, 3, 5, 7, 14, 30].map((days) => (
+              <TouchableOpacity
+                key={days}
+                accessibilityRole="button"
+                accessibilityLabel={`Reserva válida por ${days} ${days === 1 ? 'dia' : 'dias'}`}
+                accessibilityState={{ selected: reservationDays === String(days) }}
+                style={[styles.dayChip, reservationDays === String(days) && styles.dayChipActive]}
+                onPress={() => setReservationDays(String(days))}
+              >
+                <Text style={[styles.dayChipText, reservationDays === String(days) && styles.dayChipTextActive]}>
+                  {days}d
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TextInput
+            style={styles.input}
+            value={reservationDays}
+            onChangeText={setReservationDays}
+            keyboardType="number-pad"
+            placeholder="Número de dias (1–90)"
+            placeholderTextColor={c.textTertiary}
+          />
+        </View>
+
         <TouchableOpacity
           style={[styles.createBtn, loading && { opacity: 0.6 }]}
           onPress={handleCreate}
@@ -246,7 +290,7 @@ export default function NovaReservaScreen() {
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.createBtnText}>Criar Reserva (válida 24h)</Text>
+            <Text style={styles.createBtnText}>Criar Reserva · {reservationDays || '—'} dias</Text>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -269,6 +313,7 @@ function createStyles(c: typeof Colors.light) {
     headerTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, color: c.text },
     scroll: { padding: 20, paddingBottom: 100, gap: 20 },
     field: { gap: 8 },
+    fieldHint: { fontFamily: 'Inter_400Regular', fontSize: 12, color: c.textSecondary },
     label: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: c.text },
     input: {
       backgroundColor: c.surface,
@@ -282,6 +327,11 @@ function createStyles(c: typeof Colors.light) {
       color: c.text,
     },
     row: { flexDirection: 'row', gap: 12 },
+    daysGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    dayChip: { minWidth: 48, alignItems: 'center', borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+    dayChipActive: { backgroundColor: c.primary, borderColor: c.primary },
+    dayChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: c.textSecondary },
+    dayChipTextActive: { color: '#fff' },
     productOption: {
       backgroundColor: c.surfaceSecondary,
       borderRadius: 10,

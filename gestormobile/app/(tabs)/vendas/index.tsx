@@ -2,11 +2,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl, useColorScheme, Alert,
+  ActivityIndicator, RefreshControl, useColorScheme, Alert, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,6 +14,7 @@ import { syncPendingSales } from '@/lib/sync';
 import { countPendingSales, getErrorSales } from '@/lib/db';
 import { Colors } from '@/constants/colors';
 import type { Sale } from '@/types';
+import { CustomerOrders } from '@/components/CustomerOrders';
 
 async function fetchTodaySales(userId: string, isAdmin: boolean): Promise<Sale[]> {
   const today = new Date();
@@ -29,6 +30,7 @@ async function fetchTodaySales(userId: string, isAdmin: boolean): Promise<Sale[]
       )
     `)
     .eq('sync_status', 'synced')
+    .is('cancelled_at', null)
     .gte('sale_date', today.toISOString())
     .order('sale_date', { ascending: false });
 
@@ -44,7 +46,8 @@ async function fetchTodaySales(userId: string, isAdmin: boolean): Promise<Sale[]
 export default function VendasScreen() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isCustomer } = useAuth();
+  const queryClient = useQueryClient();
   const [pendingCount, setPendingCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -52,7 +55,7 @@ export default function VendasScreen() {
   const { data: sales = [], isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['sales-today', user?.id, isAdmin],
     queryFn: () => fetchTodaySales(user!.id, isAdmin),
-    enabled: !!user,
+    enabled: !!user && !isCustomer,
   });
 
   const refreshCounts = useCallback(async () => {
@@ -94,6 +97,51 @@ export default function VendasScreen() {
   const totalHoje = sales.reduce((s, v) => s + v.total_price, 0);
   const styles = createStyles(c);
 
+  if (isCustomer) {
+    return <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.customerHeader}><Text style={styles.headerTitle}>Comprar</Text></View>
+      <FlatList
+        data={[]}
+        renderItem={() => null}
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={<CustomerOrders colors={c} />}
+      />
+    </SafeAreaView>;
+  }
+
+  const cancelCheckout = (checkoutId: string) => {
+    const executeCancellation = async () => {
+        const { data, error } = await supabase.rpc('cancel_checkout', { p_checkout_id: checkoutId });
+        if (error || !data?.success) {
+          Alert.alert('Erro', error?.message || 'Não foi possível cancelar a venda.');
+          return;
+        }
+        await Promise.all([
+          refetch(),
+          queryClient.invalidateQueries({ queryKey: ['products'] }),
+          queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+          queryClient.invalidateQueries({ queryKey: ['rewards'] }),
+        ]);
+        Alert.alert('Venda cancelada', 'Stock e contagem de referrals foram corrigidos.');
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Cancelar esta venda? O stock será reposto e as camisolas referenciadas serão descontadas.')) {
+        void executeCancellation();
+      }
+      return;
+    }
+
+    Alert.alert(
+      'Cancelar venda',
+      'O stock será reposto e as camisolas referenciadas serão descontadas. Continuar?',
+      [
+        { text: 'Voltar', style: 'cancel' },
+        { text: 'Cancelar venda', style: 'destructive', onPress: () => void executeCancellation() },
+      ],
+    );
+  };
+
   const renderSale = ({ item }: { item: Sale }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -116,6 +164,11 @@ export default function VendasScreen() {
       <Text style={styles.saleDate}>
         {new Date(item.sale_date).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
       </Text>
+      {isAdmin && item.checkout_id && (
+        <TouchableOpacity style={styles.cancelButton} onPress={() => cancelCheckout(item.checkout_id!)}>
+          <Text style={styles.cancelButtonText}>Cancelar / Devolver</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -177,6 +230,7 @@ export default function VendasScreen() {
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={() => { refetch(); refreshCounts(); }} tintColor={c.primary} />
           }
+          ListHeaderComponent={<View style={styles.ordersHeader}><CustomerOrders colors={c} team /></View>}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>🛒</Text>
@@ -202,6 +256,8 @@ function createStyles(c: typeof Colors.light) {
       paddingBottom: 12,
     },
     headerTitle: { fontFamily: 'Inter_700Bold', fontSize: 28, color: c.text, letterSpacing: -0.5 },
+    customerHeader: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
+    ordersHeader: { marginBottom: 20 },
     headerSubtitle: { fontFamily: 'Inter_600SemiBold', fontSize: 16, color: c.primary, marginTop: 2 },
     addButton: { backgroundColor: c.primary, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10 },
     addButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: '#fff' },
@@ -235,6 +291,8 @@ function createStyles(c: typeof Colors.light) {
     paymentBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
     paymentText: { fontFamily: 'Inter_400Regular', fontSize: 11, color: c.textSecondary },
     saleDate: { fontFamily: 'Inter_400Regular', fontSize: 12, color: c.textTertiary },
+    cancelButton: { alignSelf: 'flex-start', backgroundColor: c.dangerLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+    cancelButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: c.danger },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     emptyState: { alignItems: 'center', paddingTop: 80, gap: 12 },
     emptyEmoji: { fontSize: 52 },

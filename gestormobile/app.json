@@ -31,6 +31,7 @@
       "expo-router",
       "expo-sqlite",
       "expo-secure-store",
+      "expo-notifications",
       "expo-font",
       [
         "expo-splash-screen",

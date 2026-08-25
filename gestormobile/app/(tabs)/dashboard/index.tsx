@@ -1,7 +1,7 @@
 // GestorMobile — Dashboard
 import {
   View, Text, ScrollView, StyleSheet,
-  ActivityIndicator, useColorScheme, TouchableOpacity, Alert
+  ActivityIndicator, useColorScheme, TouchableOpacity, Alert, Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +10,7 @@ import * as Sharing from 'expo-sharing';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Colors } from '@/constants/colors';
+import { ReferralRewards } from '@/components/ReferralRewards';
 
 interface ExportedSale {
   sale_date: string;
@@ -33,7 +34,10 @@ async function fetchDashboardData() {
   today.setHours(0, 0, 0, 0);
 
   const [salesRes, reservationsRes, monthlyRes] = await Promise.all([
-    supabase.from('sales').select('total_price, quantity').eq('sync_status', 'synced').gte('sale_date', today.toISOString()),
+    supabase.from('sales').select('total_price, quantity')
+      .eq('sync_status', 'synced')
+      .is('cancelled_at', null)
+      .gte('sale_date', today.toISOString()),
     supabase.from('reservations').select('id', { count: 'exact' }).eq('status', 'Pendente'),
     supabase.from('monthly_sales_summary').select('*').limit(6)
   ]);
@@ -48,7 +52,7 @@ async function fetchDashboardData() {
 export default function DashboardScreen() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
-  const { isAdmin } = useAuth();
+  const { isAdmin, signOut } = useAuth();
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -58,11 +62,32 @@ export default function DashboardScreen() {
 
   const styles = createStyles(c);
 
+  const handleSignOut = () => {
+    const finish = async () => {
+      try {
+        await signOut();
+      } catch {
+        Alert.alert('Erro', 'Não foi possível terminar a sessão. Tenta novamente.');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Queres terminar a sessão?')) void finish();
+      return;
+    }
+
+    Alert.alert('Terminar sessão', 'Queres terminar a sessão?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Terminar', style: 'destructive', onPress: () => void finish() },
+    ]);
+  };
+
   const exportCSV = async () => {
     try {
       const { data: allSales, error } = await supabase
         .from('sales')
         .select(`id, sale_date, total_price, quantity, payment_method, sync_status, product_variants(size, products(name))`)
+        .is('cancelled_at', null)
         .order('sale_date', { ascending: false });
         
       if (error) throw error;
@@ -79,30 +104,30 @@ export default function DashboardScreen() {
           .join(',') + '\n';
       });
 
-      const fileUri = FileSystem.documentDirectory + 'vendas_export.csv';
-      await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
-      
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri);
+      if (Platform.OS === 'web') {
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'vendas_export.csv';
+        link.click();
+        URL.revokeObjectURL(url);
       } else {
-        Alert.alert('Erro', 'A partilha de ficheiros não está disponível neste dispositivo.');
+        const fileUri = FileSystem.documentDirectory + 'vendas_export.csv';
+        await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri);
+        } else {
+          Alert.alert('Erro', 'A partilha de ficheiros não está disponível neste dispositivo.');
+        }
       }
     } catch (e: any) {
       Alert.alert('Erro', 'Não foi possível exportar as vendas.');
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <SafeAreaView style={[styles.container, styles.centered]}>
-        <Text style={{ fontSize: 60, marginBottom: 20 }}>🔒</Text>
-        <Text style={styles.headerTitle}>Acesso Restrito</Text>
-        <Text style={{ color: c.textSecondary, marginTop: 10 }}>O Dashboard financeiro é apenas para administradores.</Text>
-      </SafeAreaView>
-    );
-  }
-
-  if (isLoading || !data) {
+  if (isAdmin && (isLoading || !data)) {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color={c.primary} />
@@ -110,11 +135,11 @@ export default function DashboardScreen() {
     );
   }
 
-  const todayRevenue = data.todaySales.reduce((acc, s) => acc + s.total_price, 0);
-  const todayItems = data.todaySales.reduce((acc, s) => acc + s.quantity, 0);
+  const todayRevenue = data?.todaySales.reduce((acc, s) => acc + s.total_price, 0) ?? 0;
+  const todayItems = data?.todaySales.reduce((acc, s) => acc + s.quantity, 0) ?? 0;
 
   // Preparar dados para o gráfico
-  const chartData = [...data.monthly].reverse().map(m => {
+  const chartData = [...(data?.monthly ?? [])].reverse().map(m => {
     const d = new Date(m.month);
     return {
       value: m.total_revenue,
@@ -130,12 +155,25 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Dashboard</Text>
-        <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}>
-          <Text style={styles.exportBtnText}>📥 Exportar CSV</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {isAdmin && <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}>
+            <Text style={styles.exportBtnText}>📥 Exportar CSV</Text>
+          </TouchableOpacity>}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Terminar sessão"
+            style={styles.signOutBtn}
+            onPress={handleSignOut}
+          >
+            <Text style={styles.signOutBtnText}>↪ Terminar sessão</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ReferralRewards colors={c} />
+
+        {isAdmin && data && <>
         
         {/* KPIs */}
         <View style={styles.kpiGrid}>
@@ -179,6 +217,7 @@ export default function DashboardScreen() {
           )}
         </View>
 
+        </>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -197,8 +236,11 @@ function createStyles(c: typeof Colors.light) {
       paddingBottom: 12,
     },
     headerTitle: { fontFamily: 'Inter_700Bold', fontSize: 28, color: c.text, letterSpacing: -0.5 },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     exportBtn: { backgroundColor: c.surfaceSecondary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
     exportBtnText: { fontFamily: 'Inter_500Medium', fontSize: 13, color: c.text },
+    signOutBtn: { borderWidth: 1, borderColor: c.border, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
+    signOutBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: c.danger },
     scroll: { padding: 20, paddingBottom: 100, gap: 20 },
     kpiGrid: { flexDirection: 'row', gap: 12 },
     kpiCard: {

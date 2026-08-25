@@ -1,5 +1,5 @@
 // GestorMobile — Ecrã de Login
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
@@ -8,29 +8,47 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
 import { Colors } from '@/constants/colors';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
-  const { signIn } = useAuth();
+  const { signIn, signUpCustomer } = useAuth();
+  const [registering, setRegistering] = useState(false);
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [commerceAvailable, setCommerceAvailable] = useState(false);
+
+  useEffect(() => {
+    supabase.rpc('customer_commerce_available').then(({ data, error }) => {
+      setCommerceAvailable(!error && data === true);
+    });
+  }, []);
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) {
+    if (!email.trim() || !password || (registering && !fullName.trim())) {
       setError('Por favor preenche o email e a password.');
       return;
     }
     setLoading(true);
     setError('');
     try {
-      await signIn(email.trim().toLowerCase(), password);
+      if (registering) {
+        const result = await signUpCustomer(fullName.trim(), email.trim().toLowerCase(), password);
+        if (!result.session) {
+          setError('Conta criada. Confirma o email e depois entra na aplicação.');
+          setRegistering(false);
+        }
+      } else {
+        await signIn(email.trim().toLowerCase(), password);
+      }
     } catch (e: any) {
-      setError('Credenciais inválidas. Verifica o email e a password.');
+      setError(e?.message || (registering ? 'Não foi possível criar a conta.' : 'Credenciais inválidas.'));
     } finally {
       setLoading(false);
     }
@@ -59,6 +77,11 @@ export default function LoginScreen() {
 
           {/* Formulário */}
           <View style={styles.form}>
+            {registering && <View style={styles.inputGroup}>
+              <Text style={styles.label}>Nome</Text>
+              <TextInput style={styles.input} placeholder="Nome completo" placeholderTextColor={c.textTertiary}
+                value={fullName} onChangeText={setFullName} autoCapitalize="words" />
+            </View>}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <TextInput
@@ -111,13 +134,19 @@ export default function LoginScreen() {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>Entrar</Text>
+                <Text style={styles.buttonText}>{registering ? 'Criar conta de cliente' : 'Entrar'}</Text>
               )}
             </TouchableOpacity>
           </View>
 
+          {commerceAvailable && <TouchableOpacity style={styles.modeButton} onPress={() => { setRegistering(!registering); setError(''); }}>
+            <Text style={styles.modeButtonText}>
+              {registering ? 'Já tens conta? Entrar' : 'Novo cliente? Criar conta'}
+            </Text>
+          </TouchableOpacity>}
+
           <Text style={styles.footer}>
-            Acesso restrito. Contacta o administrador para obter credenciais.
+            Clientes podem criar conta. A equipa entra com as credenciais atribuídas pelo administrador.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -245,5 +274,7 @@ function createStyles(c: typeof Colors.light) {
       textAlign: 'center',
       marginTop: 40,
     },
+    modeButton: { alignItems: 'center', paddingVertical: 14 },
+    modeButtonText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: c.primary },
   });
 }

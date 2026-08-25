@@ -37,6 +37,10 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
+-- Esta função existe apenas para o trigger interno de Auth.
+-- Não deve poder ser chamada diretamente pela API.
+REVOKE ALL ON FUNCTION handle_new_user() FROM PUBLIC, anon, authenticated;
+
 
 -- ============================================================
 -- TABELA: products (Catálogo de Camisolas)

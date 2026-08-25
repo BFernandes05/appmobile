@@ -3,6 +3,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import { StyleSheet, useColorScheme, View } from 'react-native';
 import { Colors } from '@/constants/colors';
+import { useAuth } from '@/hooks/useAuth';
 
 type TabIconName = keyof typeof Ionicons.glyphMap;
 
@@ -27,6 +28,7 @@ function TabIcon({
 export default function TabsLayout() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
+  const { isCustomer } = useAuth();
 
   return (
     <Tabs
@@ -60,6 +62,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="reservas"
         options={{
+          href: isCustomer ? null : undefined,
           title: 'Reservas',
           tabBarAccessibilityLabel: 'Abrir Reservas',
           tabBarIcon: ({ focused, color }) => (
@@ -70,8 +73,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="vendas"
         options={{
-          title: 'Vendas',
-          tabBarAccessibilityLabel: 'Abrir Vendas',
+          title: isCustomer ? 'Comprar' : 'Vendas',
+          tabBarAccessibilityLabel: isCustomer ? 'Comprar artigos' : 'Abrir Vendas',
           tabBarIcon: ({ focused, color }) => (
             <TabIcon icon="cart-outline" activeIcon="cart" focused={focused} color={color} />
           ),
@@ -80,7 +83,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: 'Dashboard',
+          title: isCustomer ? 'Conta' : 'Dashboard',
           tabBarAccessibilityLabel: 'Abrir Dashboard',
           tabBarIcon: ({ focused, color }) => (
             <TabIcon icon="stats-chart-outline" activeIcon="stats-chart" focused={focused} color={color} />

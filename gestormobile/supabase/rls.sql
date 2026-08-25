@@ -35,7 +35,11 @@ DROP POLICY IF EXISTS "Profiles são visíveis para utilizadores autenticados" O
 DROP POLICY IF EXISTS "Admin pode atualizar perfis" ON profiles;
 DROP POLICY IF EXISTS "Utilizador pode atualizar o próprio perfil" ON profiles;
 CREATE POLICY "Profiles são visíveis para utilizadores autenticados"
-ON profiles FOR SELECT TO authenticated USING (true);
+ON profiles FOR SELECT TO authenticated
+USING (
+  id = (SELECT auth.uid())
+  OR (SELECT private.is_admin())
+);
 
 CREATE POLICY "Admin pode atualizar perfis"
 ON profiles FOR UPDATE TO authenticated

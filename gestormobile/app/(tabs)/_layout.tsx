@@ -1,10 +1,15 @@
 // GestorMobile — navegação principal
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
-import { StyleSheet, useColorScheme, View } from 'react-native';
-import { Colors } from '@/constants/colors';
-import { useAuth } from '@/hooks/useAuth';
-import { useOrganization } from '@/hooks/useOrganization';
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { Tabs } from "expo-router";
+import {
+  StyleSheet,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { Colors } from "@/constants/colors";
+import { useAuth } from "@/hooks/useAuth";
+import { useOrganization } from "@/hooks/useOrganization";
 
 type TabIconName = keyof typeof Ionicons.glyphMap;
 
@@ -28,7 +33,9 @@ function TabIcon({
 
 export default function TabsLayout() {
   const colorScheme = useColorScheme();
-  const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
+  const c = colorScheme === "dark" ? Colors.dark : Colors.light;
+  const { width } = useWindowDimensions();
+  const desktop = width >= 960;
   const { isCustomer } = useAuth();
   const { settings } = useOrganization();
 
@@ -36,28 +43,38 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarPosition: desktop ? "left" : "bottom",
+        tabBarLabelPosition: desktop ? "beside-icon" : "below-icon",
         tabBarStyle: {
           backgroundColor: c.tabBar,
-          borderTopColor: c.tabBarBorder,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          height: 86,
-          paddingTop: 8,
-          paddingBottom: 8,
+          borderColor: c.tabBarBorder,
+          borderTopWidth: desktop ? 0 : StyleSheet.hairlineWidth,
+          borderRightWidth: desktop ? StyleSheet.hairlineWidth : 0,
+          width: desktop ? 228 : undefined,
+          height: desktop ? "100%" : 86,
+          paddingTop: desktop ? 28 : 8,
+          paddingBottom: desktop ? 20 : 8,
+          paddingHorizontal: desktop ? 12 : 0,
         },
         tabBarActiveTintColor: c.primary,
         tabBarInactiveTintColor: c.textSecondary,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarItemStyle: styles.tabItem,
+        tabBarLabelStyle: [styles.tabLabel, desktop && styles.tabLabelDesktop],
+        tabBarItemStyle: [styles.tabItem, desktop && styles.tabItemDesktop],
         tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen
         name="catalogo"
         options={{
-          title: 'Catálogo',
-          tabBarAccessibilityLabel: 'Abrir Catálogo',
+          title: "Catálogo",
+          tabBarAccessibilityLabel: "Abrir Catálogo",
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon icon="shirt-outline" activeIcon="shirt" focused={focused} color={color} />
+            <TabIcon
+              icon="shirt-outline"
+              activeIcon="shirt"
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -65,31 +82,65 @@ export default function TabsLayout() {
         name="reservas"
         options={{
           href: isCustomer || !settings.reservations_enabled ? null : undefined,
-          title: 'Reservas',
-          tabBarAccessibilityLabel: 'Abrir Reservas',
+          title: "Reservas",
+          tabBarAccessibilityLabel: "Abrir Reservas",
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon icon="calendar-outline" activeIcon="calendar" focused={focused} color={color} />
+            <TabIcon
+              icon="calendar-outline"
+              activeIcon="calendar"
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
       <Tabs.Screen
         name="vendas"
         options={{
-          href: isCustomer && !settings.customer_store_enabled ? null : undefined,
-          title: isCustomer ? 'Comprar' : 'Vendas',
-          tabBarAccessibilityLabel: isCustomer ? 'Comprar artigos' : 'Abrir Vendas',
+          href:
+            isCustomer && !settings.customer_store_enabled ? null : undefined,
+          title: isCustomer ? "Comprar" : "Vendas",
+          tabBarAccessibilityLabel: isCustomer
+            ? "Comprar artigos"
+            : "Abrir Vendas",
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon icon="cart-outline" activeIcon="cart" focused={focused} color={color} />
+            <TabIcon
+              icon="cart-outline"
+              activeIcon="cart"
+              focused={focused}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="clientes"
+        options={{
+          href: isCustomer ? null : undefined,
+          title: "Clientes",
+          tabBarAccessibilityLabel: "Abrir Clientes",
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon
+              icon="people-outline"
+              activeIcon="people"
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: isCustomer ? 'Conta' : 'Dashboard',
-          tabBarAccessibilityLabel: 'Abrir Dashboard',
+          title: isCustomer ? "Conta" : "Dashboard",
+          tabBarAccessibilityLabel: "Abrir Dashboard",
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon icon="stats-chart-outline" activeIcon="stats-chart" focused={focused} color={color} />
+            <TabIcon
+              icon="stats-chart-outline"
+              activeIcon="stats-chart"
+              focused={focused}
+              color={color}
+            />
           ),
         }}
       />
@@ -101,20 +152,27 @@ const styles = StyleSheet.create({
   tabItem: {
     paddingVertical: 2,
   },
+  tabItemDesktop: { maxHeight: 58, borderRadius: 12, marginVertical: 3 },
   tabLabel: {
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: "Inter_600SemiBold",
     fontSize: 11,
     lineHeight: 14,
     marginTop: 2,
+  },
+  tabLabelDesktop: {
+    fontSize: 13,
+    textAlign: "left",
+    marginTop: 0,
+    marginLeft: 4,
   },
   iconContainer: {
     width: 46,
     height: 30,
     borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconContainerActive: {
-    backgroundColor: 'rgba(129, 140, 248, 0.16)',
+    backgroundColor: "rgba(129, 140, 248, 0.16)",
   },
 });

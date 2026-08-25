@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Alert, useColorScheme, KeyboardAvoidingView, Platform,
+  TextInput, Alert, useColorScheme, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -239,7 +239,7 @@ export default function NovaVendaScreen() {
           
           {/* Adicionar Produtos */}
           <View style={styles.section}>
-            <Text style={styles.label}>Procurar Produto</Text>
+            <Text style={styles.label}>Escolher artigo</Text>
             <TextInput
               style={styles.input}
               value={productSearch}
@@ -247,21 +247,46 @@ export default function NovaVendaScreen() {
               placeholder="🔍 Nome da camisola..."
               placeholderTextColor={c.textTertiary}
             />
-            {productSearch.length > 0 && filteredProducts.slice(0, 4).map((product) => (
+            <Text style={styles.catalogHint}>{filteredProducts.length} artigos disponíveis · toca para escolher</Text>
+            <View style={styles.productGrid}>
+            {filteredProducts.map((product) => {
+              const activeVariants = (product.variants ?? []).filter((variant) => variant.is_active);
+              const totalStock = activeVariants.reduce((sum, variant) => sum + variant.stock_quantity, 0);
+              return (
               <TouchableOpacity
                 key={product.id}
-                style={styles.searchResult}
+                accessibilityRole="button"
+                accessibilityLabel={`Escolher ${product.name}, ${totalStock} em stock`}
+                accessibilityState={{ selected: selectedProduct?.id === product.id, disabled: totalStock === 0 }}
+                style={[styles.productCard, selectedProduct?.id === product.id && styles.productCardActive]}
                 onPress={() => setSelectedProduct(product)}
+                disabled={totalStock === 0}
               >
-                <Text style={styles.searchResultText}>{product.name}</Text>
+                {product.image_url ? (
+                  <Image source={{ uri: product.image_url }} style={styles.productImage} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.productImage, styles.productPlaceholder]}><Text style={styles.productEmoji}>👕</Text></View>
+                )}
+                <View style={styles.productCardBody}>
+                  <Text style={styles.productCardName} numberOfLines={2}>{product.name}</Text>
+                  <Text style={styles.productCategory}>{product.category}</Text>
+                  <Text style={[styles.productStock, totalStock === 0 && { color: c.danger }]}>
+                    {totalStock > 0 ? `${totalStock} em stock` : 'Sem stock'}
+                  </Text>
+                </View>
               </TouchableOpacity>
-            ))}
+            );})}
+            </View>
+
+            {filteredProducts.length === 0 && (
+              <View style={styles.emptyProducts}><Text style={styles.emptyCartText}>Nenhum artigo corresponde à pesquisa.</Text></View>
+            )}
 
             {selectedProduct && (
               <View style={styles.variantsBox}>
                 <Text style={styles.variantsTitle}>Tamanhos para {selectedProduct.name}:</Text>
                 <View style={styles.variantGrid}>
-                  {(selectedProduct.variants ?? []).map((variant) => (
+                  {(selectedProduct.variants ?? []).filter((variant) => variant.is_active).map((variant) => (
                     <TouchableOpacity
                       key={variant.id}
                       style={[styles.variantChip, variant.stock_quantity === 0 && { opacity: 0.5 }]}
@@ -465,13 +490,18 @@ function createStyles(c: typeof Colors.light) {
       fontSize: 15,
       color: c.text,
     },
-    searchResult: {
-      backgroundColor: c.surfaceSecondary,
-      padding: 12,
-      borderRadius: 10,
-      marginTop: 4,
-    },
-    searchResultText: { fontFamily: 'Inter_500Medium', fontSize: 14, color: c.text },
+    catalogHint: { fontFamily: 'Inter_400Regular', fontSize: 12, color: c.textSecondary },
+    productGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    productCard: { width: '48%', minWidth: 145, flexGrow: 1, flexBasis: 145, overflow: 'hidden', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 14 },
+    productCardActive: { borderColor: c.primary, borderWidth: 2, backgroundColor: c.primaryLight },
+    productImage: { width: '100%', height: 112, backgroundColor: c.surfaceSecondary },
+    productPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+    productEmoji: { fontSize: 36 },
+    productCardBody: { padding: 10, gap: 3 },
+    productCardName: { fontFamily: 'Inter_600SemiBold', fontSize: 14, lineHeight: 18, color: c.text },
+    productCategory: { fontFamily: 'Inter_400Regular', fontSize: 11, color: c.textSecondary },
+    productStock: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: c.success, marginTop: 3 },
+    emptyProducts: { padding: 20, alignItems: 'center', backgroundColor: c.surfaceSecondary, borderRadius: 12 },
     variantsBox: {
       backgroundColor: c.surface,
       borderRadius: 12,

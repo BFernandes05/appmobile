@@ -4,6 +4,7 @@ import { Tabs } from 'expo-router';
 import { StyleSheet, useColorScheme, View } from 'react-native';
 import { Colors } from '@/constants/colors';
 import { useAuth } from '@/hooks/useAuth';
+import { useOrganization } from '@/hooks/useOrganization';
 
 type TabIconName = keyof typeof Ionicons.glyphMap;
 
@@ -29,6 +30,7 @@ export default function TabsLayout() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const { isCustomer } = useAuth();
+  const { settings } = useOrganization();
 
   return (
     <Tabs
@@ -62,7 +64,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="reservas"
         options={{
-          href: isCustomer ? null : undefined,
+          href: isCustomer || !settings.reservations_enabled ? null : undefined,
           title: 'Reservas',
           tabBarAccessibilityLabel: 'Abrir Reservas',
           tabBarIcon: ({ focused, color }) => (
@@ -73,6 +75,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="vendas"
         options={{
+          href: isCustomer && !settings.customer_store_enabled ? null : undefined,
           title: isCustomer ? 'Comprar' : 'Vendas',
           tabBarAccessibilityLabel: isCustomer ? 'Comprar artigos' : 'Abrir Vendas',
           tabBarIcon: ({ focused, color }) => (

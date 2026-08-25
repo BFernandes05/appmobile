@@ -2,6 +2,7 @@ import { Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useOrganization } from '@/hooks/useOrganization';
 import { Colors } from '@/constants/colors';
 import type { Profile, Voucher } from '@/types';
 
@@ -9,6 +10,7 @@ interface RewardsData { profile: Profile; vouchers: Voucher[] }
 
 export function ReferralRewards({ colors }: { colors: typeof Colors.light }) {
   const { user } = useAuth();
+  const { settings } = useOrganization();
   const styles = createStyles(colors);
   const { data, isLoading, error } = useQuery({
     queryKey: ['rewards', user?.id],
@@ -36,8 +38,8 @@ export function ReferralRewards({ colors }: { colors: typeof Colors.light }) {
   const available = data.vouchers.filter(v => !v.is_used && !v.revoked_at && new Date(v.expires_at) > new Date());
   const history = data.vouchers.filter(v => v.is_used || !!v.revoked_at || new Date(v.expires_at) <= new Date());
   const shareCode = () => Share.share({
-    message: `Usa o meu código ${data.profile.referral_code} na tua compra na RBR BLuxuries. A cada 2 compras indicadas ganho uma camisola por 15 €! https://gestormobile.expo.app`,
-    title: 'Código de amigo RBR BLuxuries',
+    message: `Usa o meu código ${data.profile.referral_code} na tua compra na ${settings.brand_name}. A cada 2 compras indicadas ganho um ${settings.item_singular} por 15 €! https://gestormobile.expo.app`,
+    title: `Código de amigo ${settings.brand_name}`,
   });
 
   return <View style={styles.wrapper}>
@@ -49,17 +51,17 @@ export function ReferralRewards({ colors }: { colors: typeof Colors.light }) {
       </TouchableOpacity>
       <View style={styles.progressHeader}>
         <Text style={styles.progressTitle}>Próximo voucher</Text>
-        <Text style={styles.progressCount}>{progress}/2 camisolas</Text>
+        <Text style={styles.progressCount}>{progress}/2 {settings.item_plural}</Text>
       </View>
       <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progress * 50}%` }]} /></View>
-      <Text style={styles.progressHint}>{progress === 1 ? 'Falta apenas uma camisola indicada.' : 'Partilha o teu código para começar.'}</Text>
+      <Text style={styles.progressHint}>{progress === 1 ? `Falta apenas um ${settings.item_singular} indicado.` : 'Partilha o teu código para começar.'}</Text>
     </View>
 
     <View style={styles.card}>
       <Text style={styles.title}>Vouchers disponíveis ({available.length})</Text>
       {available.length === 0 ? <Text style={styles.muted}>Ainda não tens vouchers disponíveis.</Text> : available.map(v =>
         <View key={v.id} style={styles.voucherRow}>
-          <View><Text style={styles.voucherCode}>{v.code}</Text><Text style={styles.voucherMeta}>Camisola por 15 € · até {new Date(v.expires_at).toLocaleDateString('pt-PT')}</Text></View>
+          <View><Text style={styles.voucherCode}>{v.code}</Text><Text style={styles.voucherMeta}>{settings.item_singular} por 15 € · até {new Date(v.expires_at).toLocaleDateString('pt-PT')}</Text></View>
           <Text style={styles.availableBadge}>Disponível</Text>
         </View>
       )}

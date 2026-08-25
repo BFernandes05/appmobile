@@ -10,6 +10,47 @@ export interface Profile {
   role: UserRole;
   referral_code: string;
   referral_count: number;
+  active_organization_id: string | null;
+  created_at: string;
+}
+
+export type OrganizationPlan = 'starter' | 'business' | 'pro';
+export type OrganizationStatus = 'trial' | 'active' | 'past_due' | 'suspended' | 'cancelled';
+export type OrganizationRole = 'owner' | 'admin' | 'staff';
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  status: OrganizationStatus;
+  plan: OrganizationPlan;
+  trial_ends_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrganizationSettings {
+  organization_id: string;
+  business_type: string;
+  brand_name: string;
+  logo_url: string | null;
+  primary_color: string;
+  currency_code: string;
+  locale: string;
+  timezone: string;
+  item_singular: string;
+  item_plural: string;
+  reservations_enabled: boolean;
+  referrals_enabled: boolean;
+  customer_store_enabled: boolean;
+  updated_at: string;
+}
+
+export interface OrganizationMember {
+  organization_id: string;
+  user_id: string;
+  role: OrganizationRole;
+  status: 'invited' | 'active' | 'disabled';
   created_at: string;
 }
 
@@ -31,6 +72,7 @@ export interface Voucher {
 
 export interface Product {
   id: string;
+  organization_id?: string;
   name: string;
   category: string;
   image_url: string | null;
@@ -41,6 +83,7 @@ export interface Product {
 
 export interface ProductVariant {
   id: string;
+  organization_id?: string;
   product_id: string;
   size: string;
   base_price: number;
@@ -54,6 +97,7 @@ export type ReservationStatus = 'Pendente' | 'Confirmada' | 'Cancelada';
 
 export interface Reservation {
   id: string;
+  organization_id?: string;
   customer_name: string;
   customer_contact: string | null;
   product_variant_id: string;
@@ -71,6 +115,7 @@ export type SyncStatus = 'pending' | 'synced' | 'error';
 
 export interface Sale {
   id: string;
+  organization_id?: string;
   customer_name: string | null;
   product_variant_id: string;
   quantity: number;
@@ -102,6 +147,7 @@ export interface CustomerOrderItem {
 
 export interface CustomerOrder {
   id: string;
+  organization_id?: string;
   customer_id: string;
   status: CustomerOrderStatus;
   payment_method: Exclude<PaymentMethod, 'Dinheiro'>;

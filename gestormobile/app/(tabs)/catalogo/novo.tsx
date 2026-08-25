@@ -9,9 +9,10 @@ import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useOrganization } from '@/hooks/useOrganization';
 import { Colors } from '@/constants/colors';
 
-const CATEGORIES = ['Home', 'Away', 'Third', 'Retro', 'Treino', 'Outro'];
+const CATEGORY_SUGGESTIONS = ['Principal', 'Novidade', 'Premium', 'Promoção', 'Serviço', 'Outro'];
 const COMMON_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 
 interface VariantInput {
@@ -24,6 +25,7 @@ export default function NovoProdutoScreen() {
   const colorScheme = useColorScheme();
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const { user } = useAuth();
+  const { organizationId, settings } = useOrganization();
   const queryClient = useQueryClient();
 
   const [name, setName] = useState('');
@@ -70,13 +72,14 @@ export default function NovoProdutoScreen() {
     try {
       const { data: product, error: productError } = await supabase
         .from('products')
-        .insert({ name: name.trim(), category })
+        .insert({ name: name.trim(), category: category.trim(), ...(organizationId ? { organization_id: organizationId } : {}) })
         .select()
         .single();
       if (productError) throw productError;
 
       const variantInserts = variants.map((v) => ({
         product_id: product.id,
+        ...(organizationId ? { organization_id: organizationId } : {}),
         size: v.size.trim().toUpperCase(),
         base_price: parseFloat(v.base_price),
         stock_quantity: parseInt(v.stock_quantity, 10),
@@ -101,7 +104,7 @@ export default function NovoProdutoScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Novo Artigo</Text>
+        <Text style={styles.headerTitle}>Novo {settings.item_singular}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -113,7 +116,7 @@ export default function NovoProdutoScreen() {
             style={[styles.input, errors.name && styles.inputError]}
             value={name}
             onChangeText={setName}
-            placeholder="ex: Sporting CP Home 24/25"
+            placeholder={`Nome do ${settings.item_singular}`}
             placeholderTextColor={c.textTertiary}
           />
           {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
@@ -122,8 +125,15 @@ export default function NovoProdutoScreen() {
         {/* Categoria */}
         <View style={styles.field}>
           <Text style={styles.label}>Categoria *</Text>
+          <TextInput
+            style={[styles.input, errors.category && styles.inputError]}
+            value={category}
+            onChangeText={setCategory}
+            placeholder="Escreve uma categoria"
+            placeholderTextColor={c.textTertiary}
+          />
           <View style={styles.categoryGrid}>
-            {CATEGORIES.map((cat) => (
+            {CATEGORY_SUGGESTIONS.map((cat) => (
               <TouchableOpacity
                 key={cat}
                 style={[styles.categoryChip, category === cat && styles.categoryChipActive]}

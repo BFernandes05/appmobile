@@ -41,7 +41,7 @@ export default function ProductDetailScreen() {
   const isWide = width >= 820;
   const c = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { isAdmin } = useAuth();
+  const { isAdmin, profile } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: product, isLoading } = useQuery({
@@ -75,7 +75,7 @@ export default function ProductDetailScreen() {
         { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG }
       );
 
-      const filePath = `${id}/${Date.now()}.jpg`;
+      const filePath = `${profile?.active_organization_id ?? 'legacy'}/${id}/${Date.now()}.jpg`;
       const imageData = await imageUriToArrayBuffer(manipulated.uri);
 
       const { error: uploadError } = await supabase.storage

@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { Colors } from '@/constants/colors';
 import { ReferralRewards } from '@/components/ReferralRewards';
+import { OrganizationAdminPanel } from '@/components/OrganizationAdminPanel';
 
 interface ExportedSale {
   sale_date: string;
@@ -174,6 +175,8 @@ export default function DashboardScreen() {
         <ReferralRewards colors={c} />
 
         {isAdmin && data && <>
+
+        <OrganizationAdminPanel colors={c} />
         
         {/* KPIs */}
         <View style={styles.kpiGrid}>

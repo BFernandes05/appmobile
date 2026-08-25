@@ -69,10 +69,10 @@ export default function LoginScreen() {
           {/* Logo / Header */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Text style={styles.logoEmoji}>⚽</Text>
+              <Text style={styles.logoEmoji}>◆</Text>
             </View>
             <Text style={styles.title}>GestorMobile</Text>
-            <Text style={styles.subtitle}>Gestão de camisolas de futebol</Text>
+            <Text style={styles.subtitle}>Gestão inteligente para qualquer negócio</Text>
           </View>
 
           {/* Formulário */}

@@ -1,5 +1,5 @@
-import { ScrollViewStyleReset } from 'expo-router/html';
-import type { PropsWithChildren } from 'react';
+import { ScrollViewStyleReset } from "expo-router/html";
+import type { PropsWithChildren } from "react";
 
 const registerServiceWorker = `
   if (
@@ -9,9 +9,27 @@ const registerServiceWorker = `
     location.hostname !== '127.0.0.1'
   ) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('/sw.js').catch(function (error) {
-        console.warn('Service worker indisponível:', error);
+      var hadController = Boolean(navigator.serviceWorker.controller);
+      var reloadKey = 'gestormobile-sw-reloaded';
+
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (hadController && sessionStorage.getItem(reloadKey) !== '1') {
+          sessionStorage.setItem(reloadKey, '1');
+          window.location.reload();
+        }
       });
+
+      navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+        .then(function (registration) {
+          sessionStorage.removeItem(reloadKey);
+          registration.update();
+          window.addEventListener('focus', function () {
+            registration.update();
+          });
+        })
+        .catch(function (error) {
+          console.warn('Service worker indisponível:', error);
+        });
     });
   }
 `;
@@ -23,10 +41,16 @@ export default function Root({ children }: PropsWithChildren) {
         <title>GestorMobile</title>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <meta name="theme-color" content="#0f172a" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta
+          name="apple-mobile-web-app-status-bar-style"
+          content="black-translucent"
+        />
         <meta name="apple-mobile-web-app-title" content="GestorMobile" />
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/icon-512.png" />

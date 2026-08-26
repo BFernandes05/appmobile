@@ -116,13 +116,29 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="clientes"
         options={{
-          href: isCustomer ? null : undefined,
+          href: isCustomer || !desktop ? null : undefined,
           title: "Clientes",
           tabBarAccessibilityLabel: "Abrir Clientes",
           tabBarIcon: ({ focused, color }) => (
             <TabIcon
               icon="people-outline"
               activeIcon="people"
+              focused={focused}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="assistente"
+        options={{
+          href: isCustomer ? null : undefined,
+          title: "Assistente",
+          tabBarAccessibilityLabel: "Abrir Assistente",
+          tabBarIcon: ({ focused, color }) => (
+            <TabIcon
+              icon="sparkles-outline"
+              activeIcon="sparkles"
               focused={focused}
               color={color}
             />

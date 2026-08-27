@@ -32,26 +32,122 @@ type VariantMatch = {
   products: { name: string } | null;
 };
 
+type ProductMatch = {
+  id: string;
+  name: string;
+  category: string;
+  product_variants: Array<{
+    id: string;
+    size: string;
+    stock_quantity: number;
+    base_price: number;
+    is_active: boolean;
+  }>;
+};
+
+function comparableProductName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\ba\s+way\b|\b(?:auei|auai)\b/g, "away")
+    .replace(/\b(2\d)[\s./-]+(2\d)\b/g, "$1 $2")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function editDistance(left: string, right: string) {
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = row[0];
+    row[0] = leftIndex;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const above = row[rightIndex];
+      row[rightIndex] = Math.min(
+        row[rightIndex] + 1,
+        row[rightIndex - 1] + 1,
+        diagonal + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return row[right.length];
+}
+
+function productScore(candidate: string, requested: string) {
+  const name = comparableProductName(candidate);
+  const query = comparableProductName(requested);
+  if (name === query) return 1;
+  if (name.includes(query) || query.includes(name)) return 0.92;
+  const nameTokens = new Set(name.split(" "));
+  const queryTokens = new Set(query.split(" "));
+  const common = [...queryTokens].filter((token) =>
+    nameTokens.has(token),
+  ).length;
+  const tokenScore = common / Math.max(nameTokens.size, queryTokens.size, 1);
+  const characterScore =
+    1 - editDistance(name, query) / Math.max(name.length, query.length, 1);
+  return tokenScore * 0.6 + characterScore * 0.4;
+}
+
+async function activeProducts(): Promise<ProductMatch[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select(
+      "id,name,category,product_variants!inner(id,size,stock_quantity,base_price,is_active)",
+    )
+    .eq("is_active", true)
+    .eq("product_variants.is_active", true)
+    .limit(250);
+  if (error) throw error;
+  return (data ?? []) as unknown as ProductMatch[];
+}
+
+async function findProduct(product: string) {
+  const ranked = (await activeProducts())
+    .map((candidate) => ({
+      candidate,
+      score: productScore(candidate.name, product),
+    }))
+    .sort((left, right) => right.score - left.score);
+  if (!ranked.length || ranked[0].score < 0.48)
+    throw new Error(`Não encontrei “${product}”.`);
+  if (
+    ranked[1] &&
+    ranked[1].score >= ranked[0].score - 0.08 &&
+    comparableProductName(ranked[1].candidate.name) !==
+      comparableProductName(ranked[0].candidate.name)
+  ) {
+    throw new Error(
+      `Encontrei resultados parecidos: “${ranked[0].candidate.name}” e “${ranked[1].candidate.name}”. Qual deles pretendes?`,
+    );
+  }
+  return ranked[0].candidate;
+}
+
 async function findVariant(
   product: string,
   size: string,
 ): Promise<VariantMatch> {
-  const { data, error } = await supabase
-    .from("product_variants")
-    .select("id,size,stock_quantity,base_price,products!inner(name)")
-    .ilike("products.name", `%${product}%`)
-    .ilike("size", size)
-    .eq("is_active", true)
-    .limit(3);
-  if (error) throw error;
-  const matches = (data ?? []) as unknown as VariantMatch[];
-  if (!matches.length)
-    throw new Error(`Não encontrei “${product}” no tamanho ${size}.`);
+  const matchedProduct = await findProduct(product);
+  const requestedSize = size.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  const matches = matchedProduct.product_variants.filter(
+    (variant) =>
+      variant.size.replace(/[^a-z0-9]/gi, "").toUpperCase() === requestedSize,
+  );
+  if (!matches.length) {
+    const sizes = matchedProduct.product_variants
+      .map((variant) => variant.size)
+      .join(", ");
+    throw new Error(
+      `“${matchedProduct.name}” não tem o tamanho ${size}. Disponíveis: ${sizes || "nenhum"}.`,
+    );
+  }
   if (matches.length > 1)
     throw new Error(
-      `Encontrei mais do que um artigo para “${product}”. Indica um nome mais específico.`,
+      `Existem variantes duplicadas de “${matchedProduct.name}” no tamanho ${size}. Corrige o duplicado no Catálogo antes de alterar o stock.`,
     );
-  return matches[0];
+  return { ...matches[0], products: { name: matchedProduct.name } };
 }
 
 function startOfToday() {
@@ -76,6 +172,7 @@ export async function prepareAssistantIntent(
         .select("size,stock_quantity,products!inner(name)")
         .lt("stock_quantity", intent.threshold)
         .eq("is_active", true)
+        .eq("products.is_active", true)
         .order("stock_quantity")
         .limit(10);
       if (error) throw error;
@@ -142,24 +239,23 @@ export async function prepareAssistantIntent(
       };
     }
     case "find_product": {
-      const { data, error } = await supabase
-        .from("products")
-        .select(
-          "name,category,product_variants(size,stock_quantity,base_price)",
-        )
-        .ilike("name", `%${intent.query}%`)
-        .eq("is_active", true)
-        .limit(5);
-      if (error) throw error;
-      if (!data?.length)
+      const ranked = (await activeProducts())
+        .map((product) => ({
+          product,
+          score: productScore(product.name, intent.query),
+        }))
+        .filter((result) => result.score >= 0.42)
+        .sort((left, right) => right.score - left.score)
+        .slice(0, 5);
+      if (!ranked.length)
         return {
           type: "message",
           text: `Não encontrei artigos para “${intent.query}”.`,
         };
-      const text = data
+      const text = ranked
         .map(
-          (product: any) =>
-            `• ${product.name} (${product.category})\n  ${(product.product_variants ?? []).map((variant: any) => `${variant.size}: ${variant.stock_quantity} un. · ${Number(variant.base_price).toFixed(2)} €`).join("; ") || "Sem variantes"}`,
+          ({ product }) =>
+            `• ${product.name} (${product.category})\n  ${product.product_variants.map((variant) => `${variant.size}: ${variant.stock_quantity} un. · ${Number(variant.base_price).toFixed(2)} €`).join("; ") || "Sem variantes"}`,
         )
         .join("\n");
       return { type: "message", text };
@@ -239,18 +335,16 @@ export async function executeAssistantAction(
   const reservationDate = new Date();
   const expiresAt = new Date(reservationDate);
   expiresAt.setDate(expiresAt.getDate() + action.days);
-  const { error } = await supabase
-    .from("reservations")
-    .insert({
-      customer_name: action.customer,
-      customer_contact: null,
-      product_variant_id: action.variantId,
-      quantity: action.quantity,
-      total_price: action.totalPrice,
-      reservation_date: reservationDate.toISOString(),
-      expires_at: expiresAt.toISOString(),
-      created_by: userId ?? null,
-    });
+  const { error } = await supabase.from("reservations").insert({
+    customer_name: action.customer,
+    customer_contact: null,
+    product_variant_id: action.variantId,
+    quantity: action.quantity,
+    total_price: action.totalPrice,
+    reservation_date: reservationDate.toISOString(),
+    expires_at: expiresAt.toISOString(),
+    created_by: userId ?? null,
+  });
   if (error) throw error;
   return "Reserva criada com sucesso.";
 }

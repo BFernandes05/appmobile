@@ -61,8 +61,8 @@ export function CustomerOrders({ colors, team = false }: { colors: typeof Colors
   return <View style={styles.wrapper}>
     <View style={styles.headingRow}>
       <View>
-        <Text style={styles.title}>{team ? 'Pedidos por confirmar' : 'As minhas compras'}</Text>
-        <Text style={styles.subtitle}>{team ? `${orders.length} aguardam validação` : 'Acompanha aqui cada pedido'}</Text>
+        <Text style={styles.title}>{team ? 'Reservas do website' : 'As minhas reservas'}</Text>
+        <Text style={styles.subtitle}>{team ? `${orders.length} aguardam contacto` : 'Acompanha aqui cada pedido'}</Text>
       </View>
       {!team && <TouchableOpacity style={styles.buyButton} onPress={() => router.push('/(tabs)/vendas/nova')}>
         <Text style={styles.buyButtonText}>+ Comprar</Text>
@@ -74,7 +74,7 @@ export function CustomerOrders({ colors, team = false }: { colors: typeof Colors
           <View style={{ flex: 1 }}>
             <Text style={styles.customer}>{team ? (order.customer?.full_name || order.customer?.email) : `Pedido #${order.id.slice(0, 8).toUpperCase()}`}</Text>
             <Text style={styles.meta}>{new Date(order.created_at).toLocaleString('pt-PT')} · {order.payment_method}</Text>
-            {team && <Text style={styles.meta}>{order.customer_phone} · {order.delivery_address}</Text>}
+            {team && <Text style={styles.contact}>Contactar: {order.customer_phone}</Text>}
           </View>
           <Text style={styles.total}>{Number(order.final_total).toFixed(2)} €</Text>
         </View>
@@ -83,7 +83,7 @@ export function CustomerOrders({ colors, team = false }: { colors: typeof Colors
         </Text>)}
         <View style={[styles.status, { backgroundColor: order.status === 'confirmed' ? colors.successLight : order.status === 'cancelled' ? colors.dangerLight : colors.warningLight }]}>
           <Text style={{ color: order.status === 'confirmed' ? colors.success : order.status === 'cancelled' ? colors.danger : colors.warning, fontFamily: 'Inter_600SemiBold', fontSize: 12 }}>
-            {order.status === 'confirmed' ? 'Venda confirmada' : order.status === 'cancelled' ? 'Cancelado' : 'A aguardar confirmação da equipa'}
+            {order.status === 'confirmed' ? 'Venda confirmada' : order.status === 'cancelled' ? 'Cancelado' : 'Por contactar'}
           </Text>
         </View>
         {order.status === 'pending' && <View style={styles.actions}>
@@ -102,7 +102,7 @@ function createStyles(c: typeof Colors.light) { return StyleSheet.create({
   empty: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 22 }, emptyText: { color: c.textSecondary, textAlign: 'center' },
   card: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 14, gap: 9 },
   cardTop: { flexDirection: 'row', gap: 12 }, customer: { fontFamily: 'Inter_700Bold', fontSize: 15, color: c.text }, meta: { fontFamily: 'Inter_400Regular', fontSize: 11, color: c.textSecondary, marginTop: 3 },
-  total: { fontFamily: 'Inter_700Bold', fontSize: 18, color: c.primary }, item: { fontFamily: 'Inter_400Regular', fontSize: 13, color: c.textSecondary },
+  total: { fontFamily: 'Inter_700Bold', fontSize: 18, color: c.primary }, item: { fontFamily: 'Inter_400Regular', fontSize: 13, color: c.textSecondary }, contact: { fontFamily: 'Inter_700Bold', fontSize: 13, color: c.primary, marginTop: 7 },
   status: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 5 }, actions: { flexDirection: 'row', gap: 8 },
   action: { flex: 1, borderRadius: 9, paddingVertical: 10, alignItems: 'center' }, actionText: { color: '#fff', fontFamily: 'Inter_700Bold', fontSize: 12 },
 }); }

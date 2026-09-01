@@ -150,7 +150,7 @@ export interface CustomerOrder {
   organization_id?: string;
   customer_id: string;
   status: CustomerOrderStatus;
-  payment_method: Exclude<PaymentMethod, 'Dinheiro'>;
+  payment_method: Exclude<PaymentMethod, 'Dinheiro'> | 'Reserva online';
   customer_phone: string;
   delivery_address: string;
   referral_code: string | null;

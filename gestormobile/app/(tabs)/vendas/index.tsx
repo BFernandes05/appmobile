@@ -230,7 +230,6 @@ export default function VendasScreen() {
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={() => { refetch(); refreshCounts(); }} tintColor={c.primary} />
           }
-          ListHeaderComponent={<View style={styles.ordersHeader}><CustomerOrders colors={c} team /></View>}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>🛒</Text>

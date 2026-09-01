@@ -270,7 +270,7 @@ export default function ReservasScreen() {
               tintColor={c.primary}
             />
           }
-          ListHeaderComponent={activeTab === 'Pendente' ? <CustomerOrders colors={c} team /> : null}
+          ListHeaderComponent={<CustomerOrders colors={c} team status={activeTab === 'Pendente' ? 'pending' : activeTab === 'Confirmada' ? 'confirmed' : 'cancelled'} />}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>📋</Text>

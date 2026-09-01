@@ -3,29 +3,29 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/colors';
-import type { CustomerOrder } from '@/types';
+import type { CustomerOrder, CustomerOrderStatus } from '@/types';
 
-async function fetchOrders(team: boolean): Promise<CustomerOrder[]> {
+async function fetchOrders(team: boolean, status?: CustomerOrderStatus): Promise<CustomerOrder[]> {
   let query = supabase.from('customer_orders').select(`
     *, customer:profiles!customer_orders_customer_id_fkey(full_name,email),
     items:customer_order_items(*,variant:product_variants(size,product:products(name)))
   `).order('created_at', { ascending: false });
-  if (team) query = query.eq('status', 'pending');
+  if (team) query = query.eq('status', status ?? 'pending');
   const { data, error } = await query;
   if (error) throw error;
   return data as CustomerOrder[];
 }
 
-export function CustomerOrders({ colors, team = false }: { colors: typeof Colors.light; team?: boolean }) {
+export function CustomerOrders({ colors, team = false, status }: { colors: typeof Colors.light; team?: boolean; status?: CustomerOrderStatus }) {
   const styles = createStyles(colors);
   const queryClient = useQueryClient();
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ['customer-orders', team ? 'team' : 'mine'],
-    queryFn: () => fetchOrders(team),
+    queryKey: ['customer-orders', team ? 'team' : 'mine', status],
+    queryFn: () => fetchOrders(team, status),
   });
 
   const runAction = async (order: CustomerOrder, action: 'confirm' | 'cancel') => {
-    const rpc = action === 'confirm' ? 'confirm_customer_order' : 'cancel_customer_order';
+    const rpc = action === 'confirm' ? 'accept_customer_order' : 'cancel_customer_order';
     const { data, error } = await supabase.rpc(rpc, { p_order_id: order.id });
     if (error || !data?.success) {
       Alert.alert('Erro', error?.message || 'Não foi possível atualizar o pedido.');
@@ -38,19 +38,19 @@ export function CustomerOrders({ colors, team = false }: { colors: typeof Colors
       queryClient.invalidateQueries({ queryKey: ['rewards'] }),
       queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
     ]);
-    Alert.alert(action === 'confirm' ? 'Venda confirmada' : 'Pedido cancelado',
-      action === 'confirm' ? 'A venda e as camisolas referenciadas foram registadas.' : 'O stock e o voucher reservado foram libertados.');
+    Alert.alert(action === 'confirm' ? 'Reserva aceite' : 'Reserva recusada',
+      action === 'confirm' ? 'A reserva foi aceite e o stock continua reservado.' : 'O stock reservado foi libertado.');
   };
 
   const ask = (order: CustomerOrder, action: 'confirm' | 'cancel') => {
     const message = action === 'confirm'
-      ? 'Confirmar pagamento e transformar este pedido em venda?'
-      : 'Cancelar este pedido e repor o stock?';
+      ? 'Aceitar esta reserva online e manter o stock reservado?'
+      : 'Recusar esta reserva e repor o stock?';
     if (Platform.OS === 'web') {
       if (window.confirm(message)) void runAction(order, action);
       return;
     }
-    Alert.alert(action === 'confirm' ? 'Confirmar venda' : 'Cancelar pedido', message, [
+    Alert.alert(action === 'confirm' ? 'Aceitar reserva' : 'Recusar reserva', message, [
       { text: 'Voltar', style: 'cancel' },
       { text: action === 'confirm' ? 'Confirmar' : 'Cancelar pedido', style: action === 'confirm' ? 'default' : 'destructive', onPress: () => void runAction(order, action) },
     ]);
@@ -87,8 +87,8 @@ export function CustomerOrders({ colors, team = false }: { colors: typeof Colors
           </Text>
         </View>
         {order.status === 'pending' && <View style={styles.actions}>
-          {team && <TouchableOpacity style={[styles.action, { backgroundColor: colors.success }]} onPress={() => ask(order, 'confirm')}><Text style={styles.actionText}>Confirmar venda</Text></TouchableOpacity>}
-          <TouchableOpacity style={[styles.action, { backgroundColor: colors.dangerLight }]} onPress={() => ask(order, 'cancel')}><Text style={[styles.actionText, { color: colors.danger }]}>Cancelar</Text></TouchableOpacity>
+          {team && <TouchableOpacity style={[styles.action, { backgroundColor: colors.success }]} onPress={() => ask(order, 'confirm')}><Text style={styles.actionText}>Aceitar reserva</Text></TouchableOpacity>}
+          <TouchableOpacity style={[styles.action, { backgroundColor: colors.dangerLight }]} onPress={() => ask(order, 'cancel')}><Text style={[styles.actionText, { color: colors.danger }]}>Recusar</Text></TouchableOpacity>
         </View>}
       </View>
     ))}

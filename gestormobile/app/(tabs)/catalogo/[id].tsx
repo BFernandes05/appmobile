@@ -15,6 +15,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { Colors } from '@/constants/colors';
 import type { Product, ProductVariant } from '@/types';
 
+const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+
 async function imageUriToArrayBuffer(uri: string): Promise<ArrayBuffer> {
   if (Platform.OS === 'web') {
     const response = await fetch(uri);
@@ -52,6 +54,7 @@ export default function ProductDetailScreen() {
 
   const [editingVariant, setEditingVariant] = useState<string | null>(null);
   const [stockAdjust, setStockAdjust] = useState('');
+  const [updatingVariant, setUpdatingVariant] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   const styles = createStyles(c);
@@ -120,14 +123,43 @@ export default function ProductDetailScreen() {
       Alert.alert('Stock inválido', 'O stock não pode ficar negativo.');
       return;
     }
-    await supabase
-      .from('product_variants')
-      .update({ stock_quantity: newStock })
-      .eq('id', variant.id);
-    setEditingVariant(null);
-    setStockAdjust('');
-    queryClient.invalidateQueries({ queryKey: ['products'] });
-    queryClient.invalidateQueries({ queryKey: ['product', id] });
+    setUpdatingVariant(variant.id);
+    try {
+      const { data: updatedVariant, error } = await supabase
+        .from('product_variants')
+        .update({ stock_quantity: newStock })
+        .eq('id', variant.id)
+        .select('id, stock_quantity')
+        .single();
+
+      if (error) throw error;
+
+      queryClient.setQueryData<Product>(['product', id], (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          variants: (current.variants ?? []).map((item) =>
+            item.id === updatedVariant.id
+              ? { ...item, stock_quantity: updatedVariant.stock_quantity }
+              : item
+          ),
+        };
+      });
+
+      setEditingVariant(null);
+      setStockAdjust('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['products'] }),
+        queryClient.invalidateQueries({ queryKey: ['product', id] }),
+      ]);
+    } catch (error: any) {
+      Alert.alert(
+        'Não foi possível atualizar o stock',
+        error?.message ?? 'Confirma a ligação e tenta novamente.'
+      );
+    } finally {
+      setUpdatingVariant(null);
+    }
   };
 
   // Desativar produto (soft delete)
@@ -160,7 +192,14 @@ export default function ProductDetailScreen() {
 
   if (!product) return null;
 
-  const activeVariants = (product.variants ?? []).filter((v) => v.is_active);
+  const activeVariants = (product.variants ?? [])
+    .filter((v) => v.is_active)
+    .sort((a, b) => {
+      const aIndex = SIZE_ORDER.indexOf(a.size.trim().toUpperCase());
+      const bIndex = SIZE_ORDER.indexOf(b.size.trim().toUpperCase());
+      return (aIndex === -1 ? SIZE_ORDER.length : aIndex)
+        - (bIndex === -1 ? SIZE_ORDER.length : bIndex);
+    });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -243,8 +282,11 @@ export default function ProductDetailScreen() {
                       <TouchableOpacity
                         style={styles.stockConfirm}
                         onPress={() => handleStockAdjust(variant)}
+                        disabled={updatingVariant === variant.id}
                       >
-                        <Text style={styles.stockConfirmText}>✓</Text>
+                        {updatingVariant === variant.id
+                          ? <ActivityIndicator size="small" color="#fff" />
+                          : <Text style={styles.stockConfirmText}>✓</Text>}
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => { setEditingVariant(null); setStockAdjust(''); }}

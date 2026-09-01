@@ -74,7 +74,7 @@ export function CustomerOrders({ colors, team = false }: { colors: typeof Colors
           <View style={{ flex: 1 }}>
             <Text style={styles.customer}>{team ? (order.customer?.full_name || order.customer?.email) : `Pedido #${order.id.slice(0, 8).toUpperCase()}`}</Text>
             <Text style={styles.meta}>{new Date(order.created_at).toLocaleString('pt-PT')} · {order.payment_method}</Text>
-            {team && <Text style={styles.contact}>Contactar: {order.customer_phone}</Text>}
+            {team && <><Text style={styles.contact}>Telefone: {order.customer_phone}</Text>{order.social_contact&&<Text style={styles.contact}>Instagram/Facebook: {order.social_contact}</Text>}<Text style={styles.meta}>Email: {order.customer?.email}</Text><Text style={styles.meta}>Morada: {order.delivery_address}</Text></>}
           </View>
           <Text style={styles.total}>{Number(order.final_total).toFixed(2)} €</Text>
         </View>

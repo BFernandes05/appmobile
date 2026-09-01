@@ -152,6 +152,7 @@ export interface CustomerOrder {
   status: CustomerOrderStatus;
   payment_method: Exclude<PaymentMethod, 'Dinheiro'> | 'Reserva online';
   customer_phone: string;
+  social_contact: string | null;
   delivery_address: string;
   referral_code: string | null;
   voucher_id: string | null;

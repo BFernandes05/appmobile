@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/colors';
 import type { Reservation } from '@/types';
+import { CustomerOrders } from '@/components/CustomerOrders';
 
 const STATUS_TABS = ['Pendente', 'Confirmada', 'Cancelada'] as const;
 
@@ -269,6 +270,7 @@ export default function ReservasScreen() {
               tintColor={c.primary}
             />
           }
+          ListHeaderComponent={activeTab === 'Pendente' ? <CustomerOrders colors={c} team /> : null}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyEmoji}>📋</Text>

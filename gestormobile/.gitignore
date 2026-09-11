@@ -34,6 +34,10 @@ yarn-error.*
 .env
 .env*.local
 
+# local Codex work and unrelated document exports
+.codex_work/
+Artigo_*.docx
+
 # typescript
 *.tsbuildinfo
 
